@@ -4,8 +4,8 @@ package Proc::Forking;
 # Fork package
 # Gnu GPL2 license
 #
-# $Id: Forking.pm,v 1.12 2004/10/11 06:58:09 fabrice Exp $
-# $Revision: 1.12 $
+# $Id: Forking.pm,v 1.13 2004/11/18 13:59:06 fabrice Exp $
+# $Revision: 1.13 $
 #
 # Fabrice Dulaunoy <fabrice@dulaunoy.com>
 ###########################################################
@@ -20,14 +20,14 @@ use Cwd;
 use Sys::Load qw/getload/;
 use vars qw($VERSION );
 
-my $CVS_version = '$Revision: 1.12 $';
+my $CVS_version = '$Revision: 1.13 $';
 $CVS_version =~ s/\$//g;
-my $CVS_date = '$Date: 2004/10/11 06:58:09 $';
+my $CVS_date = '$Date: 2004/11/18 13:59:06 $';
 my $REVISION = "version $CVS_version created $CVS_date";
 $CVS_version =~ s/Revision: //g;
 my $VERSIONA = $';
 $VERSIONA =~ s/ //g;
-$VERSION = do { my @rev = (q$Revision: 1.12 $ =~ /\d+/g); sprintf "%d."."%d" x $#rev, @rev };
+$VERSION = do { my @rev = (q$Revision: 1.13 $ =~ /\d+/g); sprintf "%d."."%d" x $#rev, @rev };
 $REVISION =~ s/\$Date: //g;
 my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;
@@ -201,15 +201,15 @@ sub fork_child
             }	
 		 if ( !defined( $self->{ _pids }{ $pid } ) )
 		{	
-		$self->{ _pids }{ $pid } = $exp_name;
+		$self->{ _pids }{ $pid }{ name } = $exp_name;
 		 if ( defined( $self->{ _pid_file } ) )
                 {
-		    $self->{ _pids }{ pid_file } = $pid_file;
+		    $self->{ _pids }{ $pid }{ pid_file } = $pid_file;
 		    $PID{ pid_file } = $pid_file;
                 }
 		 if ( defined( $self->{ _home } ) )
                 {
-		    $self->{ _pids }{ home } = $self->{ _home };
+		    $self->{ _pids }{ $pid }{ home } = $self->{ _home };
 		    $PID{ home } = $self->{ _home };
                 }
             }
@@ -369,7 +369,7 @@ sub list_names
 sub pid_nbr
 {
     my $self = shift;
-    return ( scalar( keys  %{$self->{_pids}} ) );
+    return ( scalar( keys  %{$self->{ _pids }} ) );
 }
 
 sub clean_childs
@@ -377,21 +377,22 @@ sub clean_childs
     my $self = shift;
     my @pid_remove_list;
     my @name_remove_list;
-    foreach my $child ( keys %{ $self->{_pids}} )
+
+    foreach my $child ( keys %{ $self->{ _pids }} )
     {
+
         my $state = kill 0 => $child;
         if ( !$state )
         {
-            my $name =  $self->{_pids}{ $child }{ name };
-            if ( defined  $self->{_pids}{ $child }{ pid_file } )
-            {
-                my $pid_file =  $self->{_pids}{ $child }{ pid_file };
-                $pid_file =~ s/##/$child/g;
-                delete $self->{_pids}{ $child }{ pid_file };
-                delete  $self->{_names}{ $name }{ pid_file };
-                if ( defined  $self->{_pids}{ $child }{ home } )
+            my $name =  $self->{ _pids }{ $child }{ name };
+            if ( defined  $self->{_pids }{ $child }{ pid_file } )
+            { 	    
+                my $pid_file =  $self->{ _pids }{ $child }{ pid_file };
+                delete $self->{ _pids }{ $child }{ pid_file };
+                delete  $self->{ _names }{ $name }{ pid_file };
+                if ( defined  $self->{ _pids }{ $child }{ home } )
                 {
-                    $pid_file =  $self->{_pids}{ $child }{ home } . $pid_file;
+                    $pid_file =  $self->{ _pids }{ $child }{ home } . $pid_file;
                 }
 
                 if ( -e $pid_file )
@@ -399,10 +400,10 @@ sub clean_childs
                     delete_pid_file( $pid_file );
                 }
             }
-            delete  $self->{_pids}{ $child }{ name };
-            delete  $self->{_pids}{ $child };
-            delete  $self->{_names}{ $name }{ pid };
-            delete $self->{_names}{ $name };
+            delete  $self->{ _pids }{ $child }{ name };
+            delete  $self->{ _pids }{ $child };
+            delete  $self->{ _names }{ $name }{ pid };
+            delete $self->{ _names }{ $name };
             push @pid_remove_list,  $child;
             push @name_remove_list, $name;
         }
@@ -548,6 +549,7 @@ The module fork a function code
 
           open( STDOUT, ">>/tmp/master.log" );
           my $nbr = 0;
+	  my tmout;
 
           while ( 1 )
           {
@@ -744,9 +746,9 @@ An optional signal could be provided
  
 =head2 list_pids
 
-	$f->list_pids;
+	my $pid = $f->list_pids;
 
-This function return a HASH like 
+This function return a reference to a HASH like 
 
        {
           '1458' => {
@@ -772,9 +774,9 @@ Same for I<home> element
 
 =head2 list_names
 
-	$f->list_names;
+	my $name = $f->list_names;
 
-This function return a HASH like  
+This function return a reference to a HASH like  
           
 	  {
           'new_name.2' => {
@@ -812,15 +814,19 @@ This function return the list of pid(s) removed because no more responding and t
 
 =head2 test_pid
 
-	my $state = $f->test_pid(PID);
+	my @state = $f->test_pid(PID);
 	
-This function return 1 and the NAME of process if the process with the PID is present in pid list and running
+This function return a ARRAY with 
+the first element is the status (1 = running and 0 = not running) 
+the second element is the NAME of process if the process with the PID is present in pid list and running
 
 =head2 test_name
 
-	my $state = $f->test_pid(NAME);
+	my @state = $f->test_pid(NAME);
 	
-This function 	eturn 1 and the PID of the process if the process with the NAME is present in name list and running
+This function return a ARRAY with
+the first element is the status (1 = running and 0 = not running)
+the second element is the PID of the process if the process with the NAME is present in name list and running
 	
 =head2 version
 
