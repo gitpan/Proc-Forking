@@ -4,8 +4,8 @@ package Proc::Forking;
 # Fork package
 # Gnu GPL2 license
 #
-# $Id: Forking.pm,v 1.13 2004/11/18 13:59:06 fabrice Exp $
-# $Revision: 1.13 $
+# $Id: Forking.pm,v 1.14 2004/11/29 13:42:53 fabrice Exp $
+# $Revision: 1.14 $
 #
 # Fabrice Dulaunoy <fabrice@dulaunoy.com>
 ###########################################################
@@ -20,14 +20,14 @@ use Cwd;
 use Sys::Load qw/getload/;
 use vars qw($VERSION );
 
-my $CVS_version = '$Revision: 1.13 $';
+my $CVS_version = '$Revision: 1.14 $';
 $CVS_version =~ s/\$//g;
-my $CVS_date = '$Date: 2004/11/18 13:59:06 $';
+my $CVS_date = '$Date: 2004/11/29 13:42:53 $';
 my $REVISION = "version $CVS_version created $CVS_date";
 $CVS_version =~ s/Revision: //g;
 my $VERSIONA = $';
 $VERSIONA =~ s/ //g;
-$VERSION = do { my @rev = (q$Revision: 1.13 $ =~ /\d+/g); sprintf "%d."."%d" x $#rev, @rev };
+$VERSION = do { my @rev = (q$Revision: 1.14 $ =~ /\d+/g); sprintf "%d."."%d" x $#rev, @rev };
 $REVISION =~ s/\$Date: //g;
 my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;
@@ -348,7 +348,7 @@ sub killall_childs
     my %pids = %{$pids};
     foreach (  keys  %pids)
     {
-	kill_child( $self ,$_);	
+	kill_child( $self ,$_,$signal);	
     }
     $SIG{ INT } = $SIG{ TERM } = $SIG{ HUP } = 'DEFAULT';    
 }

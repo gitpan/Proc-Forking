@@ -1,3 +1,31 @@
+Revision : 1.14 Date : 2004/11/29 13:42:53
+
+in killall_childs send $signal to kill_child
+
+----------------------------
+Revision : 1.13 Date : 2004/11/18 13:59:6
+
+clean error in pid hash
+clean kill_childs
+clean doc
+
+----------------------------
+Revision : 1.12 Date : 2004/10/11 6:58:9
+
+clean code
+
+----------------------------
+Revision : 1.11 Date : 2004/10/1 13:27:36
+
+return for list_names and list_pids as ref
+
+----------------------------
+Revision : 1.10 Date : 2004/10/1 8:10:43
+
+create global internal object for PID and NAME to allow garbage child to
+delete child list
+
+----------------------------
 Revision : 1.9 Date : 2004/9/30 7:19:3
 
 corrrect signal handler in child
