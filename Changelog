@@ -1,8 +1,30 @@
 ----------------------------
+Revision : 1.28 Date : 2005/1/14 12:2:9
+
+correct test_name and test_pid
+use exists in place of defined
+test context call to return array or scalar
+
+----------------------------
+Revision : 1.27 Date : 2005/1/11 10:21:44
+
+add a small example
+
+----------------------------
+Revision : 1.26 Date : 2005/1/10 15:59:57
+
+set an expiration_auto to auto kill a expired process
+create set_expiration and get_expiration functions
+
+----------------------------
+Revision : 1.25 Date : 2005/1/10 8:13:45
+
+use a timeout for expiration of function
+
+----------------------------
 Revision : 1.24 Date : 2005/1/5 15:42:41
 
 add start_time in process list and also for master 
-
 add expiration function
 add max_mem to test the free memory before forking
 

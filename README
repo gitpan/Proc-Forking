@@ -5,6 +5,8 @@ It allow to fork a function with change of UID, GID, ROOT
 Creation of PID files is possible
 It is possible to set a LOAD 1 min. limit to prevent forking if the computer is to busy
 It is possible to limit the maximal number of process to launch.
+It is possible to put a minimal memory free before forking
+It is possible to put an expiration time (automatic or by request)
 A daemonize function allow to put the parent  process in daemon mode.
 
 

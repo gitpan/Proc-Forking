@@ -4,8 +4,8 @@ package Proc::Forking;
 # Fork package
 # Gnu GPL2 license
 #
-# $Id: Forking.pm,v 1.24 2005/01/06 13:38:41 fabrice Exp $
-# $Revision: 1.24 $
+# $Id: Forking.pm,v 1.28 2005/01/14 12:02:09 fabrice Exp $
+# $Revision: 1.28 $
 #
 # Fabrice Dulaunoy <fabrice@dulaunoy.com>
 ###########################################################
@@ -20,20 +20,17 @@ use Cwd;
 use Sys::Load qw/getload/;
 use vars qw($VERSION );
 
-my $CVS_version = '$Revision: 1.24 $';
+my $CVS_version = '$Revision: 1.28 $';
 $CVS_version =~ s/\$//g;
-my $CVS_date = '$Date: 2005/01/06 13:38:41 $';
+my $CVS_date = '$Date: 2005/01/14 12:02:09 $';
 my $REVISION = "version $CVS_version created $CVS_date";
 $CVS_version =~ s/Revision: //g;
 my $VERSIONA = $';
 $VERSIONA =~ s/ //g;
-$VERSION = do { my @rev = ( q$Revision: 1.24 $ =~ /\d+/g ); sprintf "%d." . "%d" x $#rev, @rev };
+$VERSION = do { my @rev = ( q$Revision: 1.28 $ =~ /\d+/g ); sprintf "%d." . "%d" x $#rev, @rev };
 $REVISION =~ s/\$Date: //g;
 my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;
-
-#$SIG{ INT } = $SIG{ TERM } = $SIG{ HUP } =
-#  sub { DESTROY; unlink $DAEMON_PID; };
 
 my %PID;
 my %NAME;
@@ -49,12 +46,14 @@ $CODE[6]  = [ 6,  "error in parameters" ];
 $CODE[7]  = [ 7,  "No function provided" ];
 $CODE[8]  = [ 8,  "Can't fork" ];
 $CODE[9]  = [ 9,  "PID already present in list of PID processes" ];
-$CODE[10] = [ 10, " already present in list of NAME processes" ];
+$CODE[10] = [ 10, "NAME already present in list of NAME processes" ];
 $CODE[11] = [ 11, "Can't chdir" ];
 $CODE[12] = [ 12, "Can't chroot" ];
 $CODE[13] = [ 13, "Can't become DAEMON" ];
 $CODE[14] = [ 14, "Can't unlink PID file" ];
 $CODE[15] = [ 15, "maximun MEM used reached" ];
+$CODE[16] = [ 16, "Expiration TIMEOUT reached" ];
+$CODE[17] = [ 17, "NO expiration parameter" ];
 
 sub daemonize
 {
@@ -140,29 +139,31 @@ sub new
 {
     my ( $class ) = @_;
     bless {
-        _function   => $_[1],
-        _args       => $_[2],
-        _name       => $_[3],
-        _pid        => $_[4],
-        _pid_file   => $_[5],
-        _home       => $_[6],
-        _uid        => $_[7],
-        _gid        => $_[8],
-        _max_child  => $_[9],
-        _max_load   => $_[10],
-        _pids       => $_[11],
-        _names      => $_[12],
-        _max_mem    => $_[13],
-        _expiration => $_[14],
-        _start_time => $_[15],
+        _function        => $_[1],
+        _args            => $_[2],
+        _name            => $_[3],
+        _pid             => $_[4],
+        _pid_file        => $_[5],
+        _home            => $_[6],
+        _uid             => $_[7],
+        _gid             => $_[8],
+        _max_child       => $_[9],
+        _max_load        => $_[10],
+        _pids            => $_[11],
+        _names           => $_[12],
+        _max_mem         => $_[13],
+        _expiration      => $_[14],
+        _expiration_auto => $_[15],
+        _start_time      => $_[16],
     }, $class;
 
 }
 
 sub fork_child
 {
-    my @param = @_;
-    my $self  = shift @param;
+    my @param      = @_;
+    my $self       = shift @param;
+    my $start_time = time;
     if ( @param % 2 )
     {
         return ( $CODE[6][0], 0, $CODE[6][1] );
@@ -178,6 +179,7 @@ sub fork_child
     $self->{ _home }     = $param{ home } if exists( $param{ home } );
     $self->{ _uid }      = $param{ uid } if exists( $param{ uid } );
     $self->{ _gid }      = $param{ gid } if exists( $param{ gid } );
+
     if ( exists( $param{ pid_file } ) )
     {
         $self->{ _pid_file } = $param{ pid_file };
@@ -209,23 +211,31 @@ sub fork_child
             return ( $CODE[15][0], 0, $CODE[15][1] );
         }
     }
-    
+
     if ( exists( $param{ expiration } ) )
     {
-        $self->{ _expiration } = $param{ expiration };
+        $self->{ _expiration } = $param{ expiration } + $start_time;
+        if ( exists( $param{ expiration_auto } ) )
+        {
+            $self->{ _expiration_auto } = $param{ expiration_auto };
+        }
+#	else
+#	{
+#	 $self->{ _expiration_auto } = 0;
+#	}
     }
-    
+
     {
         my $pid;
         my $ret;
-	my $start_time = time;
+
         if ( $pid = fork() )
         {
 ## in  parent
             $self->{ _pid } = $pid;
             my $pid_file;
             my $exp_name;
-	    $self->{ _start_time } = $^T;
+            $self->{ _start_time } = $^T;
             if ( defined( $self->{ _name } ) )
             {
                 $exp_name = $self->{ _name };
@@ -238,13 +248,17 @@ sub fork_child
             }
             if ( !defined( $self->{ _pids }{ $pid } ) )
             {
-                $self->{ _pids }{ $pid }{ name } = $exp_name;
-		$self->{ _pids }{ $pid }{ start_time } = $start_time;
-		if ( defined( $self->{ _expiration } ) )
+                $self->{ _pids }{ $pid }{ name }       = $exp_name;
+                $self->{ _pids }{ $pid }{ start_time } = $start_time;
+                if ( defined( $self->{ _expiration } ) )
                 {
-	           $self->{ _pids }{ $pid }{ expiration } =   $self->{ _expiration };
-	        }
-		$PID{ $pid }{ name } =  $exp_name;
+                    $self->{ _pids }{ $pid }{ expiration } = $self->{ _expiration };
+                }
+                if ( defined( $self->{ _expiration_auto } ) )
+                {
+                    $self->{ _pids }{ $pid }{ expiration_auto } = $self->{ _expiration_auto };
+                }
+                $PID{ $pid }{ name } = $exp_name;
                 if ( defined( $self->{ _pid_file } ) )
                 {
                     $self->{ _pids }{ $pid }{ pid_file } = $pid_file;
@@ -262,12 +276,16 @@ sub fork_child
             }
             if ( !defined( $self->{ _names }{ $exp_name } ) )
             {
-                $self->{ _names }{ $exp_name }{ pid } = $pid;
-		$self->{ _names }{ $exp_name }{ start_time } = $start_time ;
-		if ( defined( $self->{ _expiration } ) )
+                $self->{ _names }{ $exp_name }{ pid }        = $pid;
+                $self->{ _names }{ $exp_name }{ start_time } = $start_time;
+                if ( defined( $self->{ _expiration } ) )
                 {
-	           $self->{ _names }{ $exp_name }{ expiration } =   $self->{ _expiration };
-	        }
+                    $self->{ _names }{ $exp_name }{ expiration } = $self->{ _expiration };
+                }
+                if ( defined( $self->{ _expiration_auto } ) )
+                {
+                    $self->{ _names }{ $exp_name }{ expiration_auto } = $self->{ _expiration_auto };
+                }
                 $NAME{ $exp_name }{ pid } = $pid;
                 if ( defined( $self->{ _pid_file } ) )
                 {
@@ -297,7 +315,7 @@ sub fork_child
                 $0 = $exp_name;
             }
             $self->{ _start_time } = $start_time;
-	    
+
             $self->{ _pid } = $pid;
             if ( $self->{ _home } ne '' )
             {
@@ -325,7 +343,38 @@ sub fork_child
                 $pid_file = $self->{ _pid_folder } . $pid_file;
             }
             $ret = create_pid_file( $pid_file, $$ );
-            $self->{ _function }( $self->{ _args } );
+            if ( ( exists( $self->{ _expiration } ) && (  exists($self->{ _expiration_auto } )) ) )
+            {
+                my $sta;
+                eval {
+                    local $SIG{ ALRM } = sub {
+                        if ( defined $self->{ _pid_file } )
+                        {
+                            my $pid_file = $self->{ _pid_file };
+                            $pid_file =~ s/##/$$/g;
+
+                            if ( -e $pid_file )
+                            {
+                                delete_pid_file( $pid_file );
+                            }
+                        }
+                        die "TIMEOUT";
+                    };
+                    alarm( $self->{ _expiration } - $self->{ _start_time } );
+                    eval { $self->{ _function }( $self->{ _args } ); };
+                    alarm 0;
+                    return ( $CODE[16][0], 16, $CODE[16][1] );
+                };
+                alarm 0;
+#		if ($@ && $@ =~ /TIMEOUT/){
+#		return ( $CODE[16][0], 16, $CODE[16][1] ) ;
+#		}
+            }
+            else
+            {
+                $self->{ _function }( $self->{ _args } );
+            }
+
             if ( defined $self->{ _pid_file } )
             {
                 my $pid_file = $self->{ _pid_file };
@@ -376,16 +425,16 @@ sub kill_child
             {
                 delete_pid_file( $pid_file );
             }
-	    delete $self->{ _pids }{ $pid }{ pid_file };
+            delete $self->{ _pids }{ $pid }{ pid_file };
             delete $self->{ _names }{ $name }{ pid_file };
         }
-	delete $self->{ _pids }{ $pid }{ expiration };
-	delete $self->{ _pids }{ $pid }{ start_time };
+        delete $self->{ _pids }{ $pid }{ expiration };
+        delete $self->{ _pids }{ $pid }{ start_time };
         delete $self->{ _pids }{ $pid }{ name };
         delete $self->{ _pids }{ $pid };
-	
+
         delete $self->{ _names }{ $name }{ expiration };
-	delete $self->{ _names }{ $name }{ start_time };
+        delete $self->{ _names }{ $name }{ start_time };
         delete $self->{ _names }{ $name }{ pid };
         delete $self->{ _names }{ $name };
 
@@ -403,7 +452,7 @@ sub killall_childs
     my $self   = shift;
     my $signal = shift || 15;
     my $pids   = $self->{ _pids };
-    my %pids = %{ $pids };
+    my %pids   = %{ $pids };
 
     foreach ( keys %pids )
     {
@@ -414,28 +463,61 @@ sub killall_childs
 
 sub expirate
 {
-    my $self   = shift; 
+    my $self   = shift;
     my $signal = shift || 15;
     my $pids   = $self->{ _pids };
-    my %pids = %{ $pids };
-    my @deleted_pid ;
-    my @deleted_name ;
-    
+    my %pids   = %{ $pids };
+    my @deleted_pid;
+    my @deleted_name;
+
     my $now = time;
-    
+
     foreach my $pid ( keys %pids )
     {
-    	if( ($self->{ _pids }{$pid}{ expiration } + $self->{ _pids }{$pid }{ start_time } ) < $now)
+        if ( $self->{ _pids }{ $pid }{ expiration } < $now )
         {
-	 $self->kill_child($pid,$signal);
-	 push @deleted_pid,$pid;
-	 push @deleted_name ,$self->{ _pids }{$pid}{ name };
-	}
+            $self->kill_child( $pid, $signal );
+            push @deleted_pid,  $pid;
+            push @deleted_name, $self->{ _pids }{ $pid }{ name };
+        }
     }
     $self->clean_childs();
-    return wantarray ? (scalar (@deleted_pid),\@deleted_pid,\@deleted_name):scalar (@deleted_pid) ;
+    return wantarray ? ( scalar( @deleted_pid ), \@deleted_pid, \@deleted_name ) : scalar( @deleted_pid );
 }
 
+sub get_expiration
+{
+    my $self = shift; 
+    my $pid            = shift;
+    if ( exists( $self->{ _pids }{ $pid }{ expiration } ) )
+    {
+        return ( $self->{ _pids }{ $pid }{ expiration } );
+    }
+    else
+    {
+        return ( $CODE[17][0], 17, $CODE[17][1] );
+    }
+}
+
+sub set_expiration
+{
+    my $self           = shift;
+    my $pid            = shift;
+    my $new_expiration = shift;
+    $new_expiration += time;
+
+    if ( exists( $self->{ _pids }{ $pid }{ expiration } ) )
+    {
+        $self->{ _pids }{ $pid }{ expiration } = $new_expiration;
+        my $name = $self->{ _pids }{ $pid }{ name };
+        $self->{ _names }{ $name }{ expiration } = $new_expiration;
+        return ( $self->{ _pids }{ $pid }{ expiration } );
+    }
+    else
+    {
+        return ( $CODE[17][0], 17, $CODE[17][1] );
+    }
+}
 
 sub list_pids
 {
@@ -482,7 +564,7 @@ sub clean_childs
                 {
                     delete_pid_file( $pid_file );
                 }
-		delete $self->{ _pids }{ $child }{ pid_file };
+                delete $self->{ _pids }{ $child }{ pid_file };
                 delete $self->{ _names }{ $name }{ pid_file };
             }
             delete $self->{ _pids }{ $child }{ name };
@@ -502,11 +584,12 @@ sub test_pid
     $self->clean_childs();
     my $child = shift;
     my $state;
-    if ( defined $self->{ _pids }{ $child } )
+    if ( exists $self->{ _pids }{ $child } )
     {
         $state = kill 0 => $child;
+	return wantarray ? ( $state,  ( $self->{ _pids }{ $child }{ name } ) ) : $state;
     }
-    return ( $state, ( $self->{ _pids }{ $child }{ name } ) );
+    return wantarray ? ( 0,  ( $self->{ _pids }{ $child }{ name } ) ) : $state;
 }
 
 sub test_name
@@ -515,11 +598,12 @@ sub test_name
     $self->clean_childs();
     my $name = shift;
     my $state;
-    if ( defined( $self->{ _names }{ $name }{ pid } ) )
+    if ( exists( $self->{ _names }{ $name } ) )
     {
         $state = kill 0 => ( $self->{ _names }{ $name }{ pid } );
+	return wantarray ? ( $state, ( $self->{ _names }{ $name }{ pid } ) ) : $state;
     }
-    return ( $state, ( $self->{ _names }{ $name }{ pid } ) );
+    return wantarray ? ( 0, ( $self->{ _names }{ $name }{ pid } ) ) : $state;
 }
 
 sub version
@@ -589,7 +673,7 @@ sub garbage_child
         {
             my $pid_file = $PID{ $child }{ pid_file };
             $pid_file =~ s/##/$child/g;
-            
+
             if ( defined $PID{ $child }{ home } )
             {
                 $pid_file = $PID{ $child }{ home } . $pid_file;
@@ -599,7 +683,7 @@ sub garbage_child
             {
                 delete_pid_file( $pid_file );
             }
-	    delete $PID{ $child }{ pid_file };
+            delete $PID{ $child }{ pid_file };
             delete $NAME{ $name }{ pid_file };
         }
 
@@ -637,8 +721,8 @@ sub getmemfree
         $mem *= 1048576;
     }
     $temp =~ /SwapFree:\s+(\d+) (\w+)\s/;
-     my $swap  = $1;
-     $unit = $2;
+    my $swap = $1;
+    $unit = $2;
     if ( $unit =~ /kb/i )
     {
         $swap *= 1024;
@@ -647,10 +731,9 @@ sub getmemfree
     {
         $swap *= 1048576;
     }
-    my $tot = $mem+$swap;
-    return wantarray ? ($tot,$mem,$swap) : $tot ;
+    my $tot = $mem + $swap;
+    return wantarray ? ( $tot, $mem, $swap ) : $tot;
 }
-
 
 1;
 
@@ -883,12 +966,21 @@ and the function will return [ 15, 0, "maximun MEM used reached" ]
 
 =over 3
 
-it is a value linked with each forked process to allow the function exprate() 
+it is a value linked with each forked process to allow the function expirate() 
 to kill the process if it is still running after that expiration time
+The expiration value write in list_pids and list_names are this value (in sec ) + the start_time 
+(to allow set_expiration to modify the value)
 
 =back 2
 
-=back 3
+
+=head3 expiration_auto
+
+=over 3
+
+if defined, the child kill themselve after the defined expiration time (!!! the set_expiration function is not able to modify this expiration time)
+
+=back 2
 
 =head2 kill_child
 
@@ -916,7 +1008,7 @@ This function return a reference to a HASH like
                       'pid_file' => '/tmp/fork.3.pid',
                       'name' => 'new_name.3',
                       'home' => '/tmp',
-		      'expiration' => '100',
+		      'expiration' => '1105369235',
 		      'start_time' => 1104998945
                     },
           '1454' => {
@@ -946,7 +1038,7 @@ This function return a reference to a HASH like
                             'pid_file' => '/tmp/fork.2.pid',
                             'pid' => 1456,
                             'home' => '/tmp'
-			    'expiration' => '100',
+			    'expiration' => '1104999045',
 		            'start_time' => 1104998945
                           },
           'new_name.3' => {
@@ -971,6 +1063,22 @@ Same for I<home> element
 This function test if child reach the expiration time and kill if necessary with the optional signal (default 15).
 In scalar context, this function return the number of childs killed.
 In array context, this function return (number of childs killed, list of PID killed, list of names killed).
+
+=head2 get_expirate
+
+	$f->get_expirate(PID)
+
+This function return the expiration time for the PID process provided
+Be care!!! If called from a child,  you could only receive the value of child forked before the child from where you call that function
+
+=head2 set_expirate
+
+	$f->set_expirate(PID, EXP)
+
+This function set the expiration time for the PID process provided.
+The new expiration time is the value + the present time.
+This function is only useable fron main program (not childs)
+
 
 =head2 getmemfree
 
@@ -1093,14 +1201,118 @@ the different possible values are:
 	[ 7, 0, "No function provided" ];
 	[ 8, 0  "Can't fork" ];
 	[ 9, PID, "PID already present in list of PID processes" ];
-	[ 10, PID, " already present in list of NAME processes" ];
+	[ 10, PID, "NAME already present in list of NAME processes" ];
 	[ 11, 0, "Can't chdir" ];
 	[ 12, 0  "Can't chroot" ];
 	[ 13, 0, "Can't become DAEMON" ];
 	[ 14, PID, "Can't unlink PID file" ];
 	[ 15, 0, "maximun MEM used reached" ];
+	[ 16, 16, "Expiration TIMEOUT reached" ];
+        [ 17, 16, "NO expiration parameter" ];
+
+=head1 EXAMPLES
+
+	#!/usr/bin/perl
+	
+	use strict;
+	use Proc::Forking;
+	use Data::Dumper;
+	use Cache::FastMmap;
+	
+	my $Cache = Cache::FastMmap->new( raw_values => 1 );
+	my $f     = Proc::Forking->new();
+	
+	my $nbr = 0;
+	my $timemout;
+	my $flag = 1;
+	$SIG{ INT } = $SIG{ TERM } = sub { $flag = 0; };
+	
+	while ( $flag )
+	{
+	    if ( $nbr < 5 )
+	    {
+	        my $extra = "other parameter";
+	        my ( $status, $pid, $error ) = $f->fork_child(
+	            function => \&func,
+	            name     => "new_name.##",
+	            args     => [ "hello SOMEONE", ( 300 + rand( 100 ) ), $extra ],
+	            pid_file => "/tmp/fork.##.pid",
+	#            uid      => 1000,
+	#            gid      => 1000,
+	#            home     => "/tmp",
+	#            max_load => 5,
+	#	    max_mem => 1850000000,
+	#            expiration_auto => 0,
+	            expiration => 10 + rand( 10 ),
+	        );
+	        if ( $status == 4 )    # if the load become to high
+	        {
+	            print "Max load reached, do a little nap\n";
+	            usleep( 100000 );
+	            next;
+	        }
+	        elsif ( $status )      # if another kind of error
+	        {
+	            print "PID=$pid\t error=$error\n";
+	        }
+	    }
+	    $nbr = $f->pid_nbr;
+	    print "nbr=$nbr\n";   
+	    
+	    foreach ( keys %list )
+	    {
+	        my $val = $Cache->get( $_ );
+	        if ( $val )
+	        {
+	            $Cache->remove( $_ );
+	            $f->set_expiration( $_, $val );
+	            print "*********PID=$_  val=$val\n";
+	        }
+	    }
+	    sleep 1;
+	
+	   my ($n,@dp,@dn)=$f->expirate;
+	   if($n)
+	   {
+	      print Dumper(@dp);
+	   }
+	}    
+	
+	
+	    
+	sub func
+	{
+	    my $ref  = shift;
+	    my @args = @$ref;
+	    my ( $data, $time_out, $sockC ) = @args;
+	    $SIG{ USR1 } = sub { open my $log, ">>/tmp/log.s"; print $log "signal USR1 received\n"; close $log; };
+	    $SIG{ USR2 } = sub { open my $log, ">>/tmp/log.s"; print $log "signal USR2 received for process $$ \n"; close $log; $Cache->set( $$, 123 ); };
+	    if ( !$time_out )
+	    {
+	        $time_out = 3;
+	    }
+	    
+	    open my $FF, ">>/tmp/loglist";
+	    print $FF "$$ free=<" . scalar( $f->getmemfree ) . ">\n";
+	    close $FF;
+	    
+	    while ( 1 )
+	    {
+	        open my $fh, ">>/tmp/log";
+	        if ( defined $fh )
+	        {
+	            print $fh "$$ expiration=<" . $f->get_expiration . ">\n";
+	            print $fh "TMOUT = $time_out  " . time . " PID=$$  cwd=" . Cwd::cwd() . " name =$0\n";
+	            $fh->close;
+	        }
+	        sleep $time_out + rand( 5 );
+	    }
+	}
+	
 
 
+
+    
 =head1 TODO
 
 =item *
