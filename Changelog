@@ -1,3 +1,17 @@
+----------------------------
+Revision : 1.24 Date : 2005/1/5 15:42:41
+
+add start_time in process list and also for master 
+
+add expiration function
+add max_mem to test the free memory before forking
+
+----------------------------
+Revision : 1.23 Date : 2005/1/5 15:42:41
+
+add start_time in process list and also for master 
+
+----------------------------
 Revision : 1.22 Date : 2004/12/23 10:45:12
 
 do a clean_childs in pid_nbr, list_pids, list_names,test_name, test_pids

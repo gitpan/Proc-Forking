@@ -4,8 +4,8 @@ package Proc::Forking;
 # Fork package
 # Gnu GPL2 license
 #
-# $Id: Forking.pm,v 1.22 2004/12/23 10:45:12 fabrice Exp $
-# $Revision: 1.22 $
+# $Id: Forking.pm,v 1.24 2005/01/06 13:38:41 fabrice Exp $
+# $Revision: 1.24 $
 #
 # Fabrice Dulaunoy <fabrice@dulaunoy.com>
 ###########################################################
@@ -20,14 +20,14 @@ use Cwd;
 use Sys::Load qw/getload/;
 use vars qw($VERSION );
 
-my $CVS_version = '$Revision: 1.22 $';
+my $CVS_version = '$Revision: 1.24 $';
 $CVS_version =~ s/\$//g;
-my $CVS_date = '$Date: 2004/12/23 10:45:12 $';
+my $CVS_date = '$Date: 2005/01/06 13:38:41 $';
 my $REVISION = "version $CVS_version created $CVS_date";
 $CVS_version =~ s/Revision: //g;
 my $VERSIONA = $';
 $VERSIONA =~ s/ //g;
-$VERSION = do { my @rev = ( q$Revision: 1.22 $ =~ /\d+/g ); sprintf "%d." . "%d" x $#rev, @rev };
+$VERSION = do { my @rev = ( q$Revision: 1.24 $ =~ /\d+/g ); sprintf "%d." . "%d" x $#rev, @rev };
 $REVISION =~ s/\$Date: //g;
 my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;
@@ -54,6 +54,7 @@ $CODE[11] = [ 11, "Can't chdir" ];
 $CODE[12] = [ 12, "Can't chroot" ];
 $CODE[13] = [ 13, "Can't become DAEMON" ];
 $CODE[14] = [ 14, "Can't unlink PID file" ];
+$CODE[15] = [ 15, "maximun MEM used reached" ];
 
 sub daemonize
 {
@@ -139,18 +140,21 @@ sub new
 {
     my ( $class ) = @_;
     bless {
-        _function  => $_[1],
-        _args      => $_[2],
-        _name      => $_[3],
-        _pid       => $_[4],
-        _pid_file  => $_[5],
-        _home      => $_[6],
-        _uid       => $_[7],
-        _gid       => $_[8],
-        _max_child => $_[9],
-        _max_load  => $_[10],
-        _pids      => $_[11],
-        _names     => $_[12],
+        _function   => $_[1],
+        _args       => $_[2],
+        _name       => $_[3],
+        _pid        => $_[4],
+        _pid_file   => $_[5],
+        _home       => $_[6],
+        _uid        => $_[7],
+        _gid        => $_[8],
+        _max_child  => $_[9],
+        _max_load   => $_[10],
+        _pids       => $_[11],
+        _names      => $_[12],
+        _max_mem    => $_[13],
+        _expiration => $_[14],
+        _start_time => $_[15],
     }, $class;
 
 }
@@ -197,15 +201,31 @@ sub fork_child
         }
     }
 
+    if ( exists( $param{ max_mem } ) )
+    {
+        $self->{ _max_mem } = $param{ max_mem };
+        if ( $self->{ _max_mem } >= getmemfree() )
+        {
+            return ( $CODE[15][0], 0, $CODE[15][1] );
+        }
+    }
+    
+    if ( exists( $param{ expiration } ) )
+    {
+        $self->{ _expiration } = $param{ expiration };
+    }
+    
     {
         my $pid;
         my $ret;
+	my $start_time = time;
         if ( $pid = fork() )
         {
 ## in  parent
             $self->{ _pid } = $pid;
             my $pid_file;
             my $exp_name;
+	    $self->{ _start_time } = $^T;
             if ( defined( $self->{ _name } ) )
             {
                 $exp_name = $self->{ _name };
@@ -219,15 +239,21 @@ sub fork_child
             if ( !defined( $self->{ _pids }{ $pid } ) )
             {
                 $self->{ _pids }{ $pid }{ name } = $exp_name;
+		$self->{ _pids }{ $pid }{ start_time } = $start_time;
+		if ( defined( $self->{ _expiration } ) )
+                {
+	           $self->{ _pids }{ $pid }{ expiration } =   $self->{ _expiration };
+	        }
+		$PID{ $pid }{ name } =  $exp_name;
                 if ( defined( $self->{ _pid_file } ) )
                 {
                     $self->{ _pids }{ $pid }{ pid_file } = $pid_file;
-                    $PID{ pid_file } = $pid_file;
+                    $PID{ $pid }{ pid_file } = $pid_file;
                 }
                 if ( defined( $self->{ _home } ) )
                 {
                     $self->{ _pids }{ $pid }{ home } = $self->{ _home };
-                    $PID{ home } = $self->{ _home };
+                    $PID{ $pid }{ home } = $self->{ _home };
                 }
             }
             else
@@ -237,6 +263,11 @@ sub fork_child
             if ( !defined( $self->{ _names }{ $exp_name } ) )
             {
                 $self->{ _names }{ $exp_name }{ pid } = $pid;
+		$self->{ _names }{ $exp_name }{ start_time } = $start_time ;
+		if ( defined( $self->{ _expiration } ) )
+                {
+	           $self->{ _names }{ $exp_name }{ expiration } =   $self->{ _expiration };
+	        }
                 $NAME{ $exp_name }{ pid } = $pid;
                 if ( defined( $self->{ _pid_file } ) )
                 {
@@ -265,7 +296,8 @@ sub fork_child
                 $exp_name =~ s/##/$$/g;
                 $0 = $exp_name;
             }
-
+            $self->{ _start_time } = $start_time;
+	    
             $self->{ _pid } = $pid;
             if ( $self->{ _home } ne '' )
             {
@@ -336,8 +368,6 @@ sub kill_child
         {
             my $pid_file = $self->{ _pids }{ $pid }{ pid_file };
             $pid_file =~ s/##/$pid/g;
-            delete $self->{ _pids }{ $pid }{ pid_file };
-            delete $self->{ _names }{ $name }{ pid_file };
             if ( defined $self->{ _pid_file } )
             {
                 $pid_file = $self->{ _pid_file } . $pid_file;
@@ -346,10 +376,16 @@ sub kill_child
             {
                 delete_pid_file( $pid_file );
             }
+	    delete $self->{ _pids }{ $pid }{ pid_file };
+            delete $self->{ _names }{ $name }{ pid_file };
         }
+	delete $self->{ _pids }{ $pid }{ expiration };
+	delete $self->{ _pids }{ $pid }{ start_time };
         delete $self->{ _pids }{ $pid }{ name };
         delete $self->{ _pids }{ $pid };
-
+	
+        delete $self->{ _names }{ $name }{ expiration };
+	delete $self->{ _names }{ $name }{ start_time };
         delete $self->{ _names }{ $name }{ pid };
         delete $self->{ _names }{ $name };
 
@@ -367,10 +403,6 @@ sub killall_childs
     my $self   = shift;
     my $signal = shift || 15;
     my $pids   = $self->{ _pids };
-    use Data::Dumper;
-    open LOG, ">> /tmp/log";
-    print LOG Dumper( $pids );
-    close LOG;
     my %pids = %{ $pids };
 
     foreach ( keys %pids )
@@ -378,9 +410,32 @@ sub killall_childs
         kill $signal => $_;
     }
     $self->clean_childs();
-
-#    $SIG{ INT } = $SIG{ TERM } = $SIG{ HUP } = 'DEFAULT';
 }
+
+sub expirate
+{
+    my $self   = shift; 
+    my $signal = shift || 15;
+    my $pids   = $self->{ _pids };
+    my %pids = %{ $pids };
+    my @deleted_pid ;
+    my @deleted_name ;
+    
+    my $now = time;
+    
+    foreach my $pid ( keys %pids )
+    {
+    	if( ($self->{ _pids }{$pid}{ expiration } + $self->{ _pids }{$pid }{ start_time } ) < $now)
+        {
+	 $self->kill_child($pid,$signal);
+	 push @deleted_pid,$pid;
+	 push @deleted_name ,$self->{ _pids }{$pid}{ name };
+	}
+    }
+    $self->clean_childs();
+    return wantarray ? (scalar (@deleted_pid),\@deleted_pid,\@deleted_name):scalar (@deleted_pid) ;
+}
+
 
 sub list_pids
 {
@@ -418,8 +473,6 @@ sub clean_childs
             if ( defined $self->{ _pids }{ $child }{ pid_file } )
             {
                 my $pid_file = $self->{ _pids }{ $child }{ pid_file };
-                delete $self->{ _pids }{ $child }{ pid_file };
-                delete $self->{ _names }{ $name }{ pid_file };
                 if ( defined $self->{ _pids }{ $child }{ home } )
                 {
                     $pid_file = $self->{ _pids }{ $child }{ home } . $pid_file;
@@ -429,6 +482,8 @@ sub clean_childs
                 {
                     delete_pid_file( $pid_file );
                 }
+		delete $self->{ _pids }{ $child }{ pid_file };
+                delete $self->{ _names }{ $name }{ pid_file };
             }
             delete $self->{ _pids }{ $child }{ name };
             delete $self->{ _pids }{ $child };
@@ -443,7 +498,7 @@ sub clean_childs
 
 sub test_pid
 {
-    my $self  = shift;
+    my $self = shift;
     $self->clean_childs();
     my $child = shift;
     my $state;
@@ -496,7 +551,7 @@ sub create_pid_file
 # pid file already exists
         my $fh      = IO::File->new( $file );
         my $pid_num = <$fh>;
-
+        close $fh;
         if ( kill 0 => $pid_num )
         {
             return ( $CODE[3][0], $pid_num, $CODE[3][1] );
@@ -509,6 +564,7 @@ sub create_pid_file
     my $fh = IO::File->new( $file, O_WRONLY | O_CREAT | O_EXCL, 0644 );
     if ( !$fh ) { return ( $CODE[2][0], $pid_num, $CODE[2][1] ); }
     print $fh $pid_num;
+    close $fh;
     return ( $CODE[0][0], $pid_num, $CODE[0][1] );
 }
 
@@ -533,8 +589,7 @@ sub garbage_child
         {
             my $pid_file = $PID{ $child }{ pid_file };
             $pid_file =~ s/##/$child/g;
-            delete $PID{ $child }{ pid_file };
-            delete $NAME{ $name }{ pid_file };
+            
             if ( defined $PID{ $child }{ home } )
             {
                 $pid_file = $PID{ $child }{ home } . $pid_file;
@@ -544,6 +599,8 @@ sub garbage_child
             {
                 delete_pid_file( $pid_file );
             }
+	    delete $PID{ $child }{ pid_file };
+            delete $NAME{ $name }{ pid_file };
         }
 
         delete $PID{ $child }{ name };
@@ -562,6 +619,39 @@ sub DESTROY
     unlink $DAEMON_PID;
 }
 
+sub getmemfree
+{
+    undef $/;
+    open MEM, "/proc/meminfo";
+    my $temp = <MEM>;
+    close MEM;
+    $temp =~ /MemFree:\s+(\d+) (\w+)\s/;
+    my $mem  = $1;
+    my $unit = $2;
+    if ( $unit =~ /kb/i )
+    {
+        $mem *= 1024;
+    }
+    elsif ( $unit =~ /mb/i )
+    {
+        $mem *= 1048576;
+    }
+    $temp =~ /SwapFree:\s+(\d+) (\w+)\s/;
+     my $swap  = $1;
+     $unit = $2;
+    if ( $unit =~ /kb/i )
+    {
+        $swap *= 1024;
+    }
+    elsif ( $unit =~ /mb/i )
+    {
+        $swap *= 1048576;
+    }
+    my $tot = $mem+$swap;
+    return wantarray ? ($tot,$mem,$swap) : $tot ;
+}
+
+
 1;
 
 =head1 ABSTRACT
@@ -573,81 +663,92 @@ The module fork a function code
 
 =over 3
 
-          use strict;
-          use Proc::Forking;
-          use Data::Dumper;
-          use Time::HiRes qw(usleep); # to allow micro sleep
-	  
-          my $f = Proc::Forking->new();
+	#!/usr/bin/perl
 
-          $f->daemonize(
-              uid      => 1000,
-              gid      => 1000,
-#              home     => "/tmp",
-              pid_file => "/tmp/master.pid"
-          );
+	use strict;
+	use Proc::Forking;
+	use Data::Dumper;
+	use Time::HiRes qw(usleep);    # to allow micro sleep
 
-          open( STDOUT, ">>/tmp/master.log" );
-          my $nbr = 0;
-	  my $timemout;
+	my $f = Proc::Forking->new();
+	$SIG{ KILL } = $SIG{ TERM } = $SIG{ INT } = sub { $f->killall_childs;sleep 1; exit },
+	          $f->daemonize(
+	##              uid      => 1000,
+	##              gid      => 1000,
+	##              home     => "/tmp",
+	              pid_file => "/tmp/master.pid"
+	          );
 
-          while ( 1 )
-          {
-              if ( $nbr < 20)
-              {
-                  my $extra = "other parameter";
-                  my ( $status, $pid, $error ) = $f->fork_child(
-                         function => \&func,
-                         name     => "new_name.##",
-                         args     => [ "hello SOMEONE", 3, $extra ],
-                         pid_file => "/tmp/fork.##.pid",
-                         uid      => 1000,
-                         gid      => 1000,
-                         home     => "/tmp",
-                         max_load => 1.5,
-                  );
-                  if ( $status == 4 ) # if the load become to high
-                  {
-                      print "Max load reached, do a little nap\n";
-		      usleep(100000);
-                      next;
-                  }
-		    elsif ( $status ) # if another kind of error
+	open( STDOUT, ">>/tmp/master.log" );
+	my $nbr = 0;
+	my $timemout;
 
-                {
-                      print "PID=$pid\t error=$error\n";
-                      print Dumper( $f->list_names() );
-                      print Dumper( $f->list_pids() );
-                      exit;
-                  }
-              }
-              $nbr = $f->pid_nbr;
-              usleep(10); # always a good idea to put a small sleep to allow task swapper to gain some free resources
-          }
-	  
-
-   sub func
-   {
-       my $ref  = shift;
-       my @args = @$ref;
-       my ( $data, $time_out, $sockC ) = @args;
-       $SIG{ USR1 } = sub { open my $log, ">>/tmp/log.s"; print $log "signal USR1 received\n"; close $log; };
-       if ( !$time_out )
-       {
-           $time_out = 3;
-       }
-
-       for ( 1 .. 4 )
-       {
-           open my $fh, ">>/tmp/log";
-           if ( defined $fh )
-           {
-               print $fh "TMOUT = $time_out  " . time . " PID=$$  cwd=" . Cwd::cwd() . " name =$0\n";
-               $fh->close;
-           }
-           sleep $time_out + rand( 5 );
-       }
-   }
+	while ( 1 )
+	{
+	    if ( $nbr < 20 )
+    	{
+	        my $extra = "other parameter";
+	        my ( $status, $pid, $error ) = $f->fork_child(
+	            function => \&func,
+	            name     => "new_name.##",
+	            args     => [ "hello SOMEONE", 3, $extra ],
+	            pid_file => "/tmp/fork.##.pid",
+	            uid      => 1000,
+	            gid      => 1000,
+	            home       => "/tmp",
+	            max_load   => 5,
+	            max_mem    => 185000000,
+	            expiration => 10,
+	        );
+	        if ( $status == 4 )    # if the load become to high
+	        {
+	            print "Max load reached, do a little nap\n";
+	            usleep( 100000 );
+	            next;
+	        }
+	        elsif ( $status )      # if another kind of error
+	
+	        {
+	            print "PID=$pid\t error=$error\n";
+	            print Dumper( $f->list_names() );
+	            print Dumper( $f->list_pids() );
+	        }
+	    }
+	    $nbr = $f->pid_nbr;
+	    my ( $n, @dp, @dn ) = $f->expirate;
+	    if ( $n )
+	    {
+	        print Dumper( @dp );
+	    }
+	    print "free=<" . scalar( $f->getmemfree ) . ">\n";
+	    usleep( 100000 );    # always a good idea to put a small sleep to allow task swapper to gain some free resources
+	}
+	
+	sub func
+	{
+	    my $ref  = shift;
+	    my @args = @$ref;
+	    my ( $data, $time_out, $sockC ) = @args;
+	    $SIG{ USR1 } = sub { open my $log, ">>/tmp/log.s"; print $log "signal USR1 received\n"; close $log; };
+	    if ( !$time_out )
+	    {
+	        $time_out = 3;
+	    }
+	    open my $FF, ">>/tmp/loglist";
+	    print $FF $$, " start time =", $^T;
+	    close $FF;
+	
+	    for ( 1 .. 4 )
+	    {
+	        open my $fh, ">>/tmp/log";
+	        if ( defined $fh )
+	        {
+	            print $fh "TMOUT = $time_out  " . time . " PID=$$  cwd=" . Cwd::cwd() . " name =$0\n";
+	            $fh->close;
+	        }
+	        sleep $time_out + rand( 5 );
+	    }
+	}
 
 
 =head1 REQUIREMENT
@@ -680,15 +781,17 @@ To create of a new pool of child:
 To fork a process
 
 	my ( $status, $pid, $error ) = $f->fork_child(
-              function => \&func,
-              name     => "new_name.$_",
-              args     => [ "\thello SOMEONE",3, $other param],
-              pid_file => "/tmp/fork.$_.pid",
-              uid      => 1000,
-              gid      => 1000,
-              home     => "/tmp",
-              max_load => 5,
-              max_child => 5
+              function   => \&func,
+              name       => "new_name.$_",
+              args       => [ "\thello SOMEONE",3, $other param],
+              pid_file   => "/tmp/fork.$_.pid",
+              uid        => 1000,
+              gid        => 1000,
+              home       => "/tmp",
+              max_load   => 5,
+              max_child  => 5,
+	      max_mem    => 1850000000,
+	      expiration => 20
               );
 	
 The only mandatory parameter is the reference to the function to fork (function => \&func)
@@ -767,6 +870,24 @@ and the function return [ 5, 0,  "maximun number of processes reached" ]
 
 =back 2
 
+=head3 max_mem
+
+=over 3
+
+if the total free memory is lower than this value, the process is not forked
+and the function will return [ 15, 0, "maximun MEM used reached" ]
+
+=back 2
+
+=head3 expiration
+
+=over 3
+
+it is a value linked with each forked process to allow the function exprate() 
+to kill the process if it is still running after that expiration time
+
+=back 2
+
 =back 3
 
 =head2 kill_child
@@ -794,7 +915,9 @@ This function return a reference to a HASH like
           '1458' => {
                       'pid_file' => '/tmp/fork.3.pid',
                       'name' => 'new_name.3',
-                      'home' => '/tmp'
+                      'home' => '/tmp',
+		      'expiration' => '100',
+		      'start_time' => 1104998945
                     },
           '1454' => {
                       'pid_file' => '/tmp/fork.1.pid',
@@ -823,6 +946,8 @@ This function return a reference to a HASH like
                             'pid_file' => '/tmp/fork.2.pid',
                             'pid' => 1456,
                             'home' => '/tmp'
+			    'expiration' => '100',
+		            'start_time' => 1104998945
                           },
           'new_name.3' => {
                             'pid_file' => '/tmp/fork.3.pid',
@@ -839,6 +964,21 @@ This function return a reference to a HASH like
 The I<pid_file> element in the HASH is only present if we provide the corresponding tag in the constructor B<fork_child>
 Same for I<home> element
 	
+=head2 expirate
+
+	$f->expirate([signal])
+
+This function test if child reach the expiration time and kill if necessary with the optional signal (default 15).
+In scalar context, this function return the number of childs killed.
+In array context, this function return (number of childs killed, list of PID killed, list of names killed).
+
+=head2 getmemfree
+
+	$f->getmemfree
+
+In scalar context, this function return the total free memory (real + swap).
+In array context, this function return ( total_memory, real_memory, swap_memory).
+
 	
 =head2 pid_nbr
 
@@ -958,6 +1098,7 @@ the different possible values are:
 	[ 12, 0  "Can't chroot" ];
 	[ 13, 0, "Can't become DAEMON" ];
 	[ 14, PID, "Can't unlink PID file" ];
+	[ 15, 0, "maximun MEM used reached" ];
 
 
 =head1 TODO
