@@ -1,3 +1,18 @@
+Revision : 1.20 Date : 2004/12/18 20:21:19
+
+add a destructor (DESTROY)
+
+----------------------------
+Revision : 1.19 Date : 2004/12/18 20:4:54
+
+clean sample code
+
+----------------------------
+Revision : 1.18 Date : 2004/12/18 19:8:34
+
+correct the delete pid_file when killing
+
+----------------------------
 Revision : 1.17 Date : 2004/12/3 15:27:30
  
 use a name when daemonize

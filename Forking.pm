@@ -4,8 +4,8 @@ package Proc::Forking;
 # Fork package
 # Gnu GPL2 license
 #
-# $Id: Forking.pm,v 1.17 2004/12/03 15:27:30 fabrice Exp $
-# $Revision: 1.17 $
+# $Id: Forking.pm,v 1.20 2004/12/18 20:21:19 fabrice Exp $
+# $Revision: 1.20 $
 #
 # Fabrice Dulaunoy <fabrice@dulaunoy.com>
 ###########################################################
@@ -20,19 +20,20 @@ use Cwd;
 use Sys::Load qw/getload/;
 use vars qw($VERSION );
 
-my $CVS_version = '$Revision: 1.17 $';
+my $CVS_version = '$Revision: 1.20 $';
 $CVS_version =~ s/\$//g;
-my $CVS_date = '$Date: 2004/12/03 15:27:30 $';
+my $CVS_date = '$Date: 2004/12/18 20:21:19 $';
 my $REVISION = "version $CVS_version created $CVS_date";
 $CVS_version =~ s/Revision: //g;
 my $VERSIONA = $';
 $VERSIONA =~ s/ //g;
-$VERSION = do { my @rev = ( q$Revision: 1.17 $ =~ /\d+/g ); sprintf "%d." . "%d" x $#rev, @rev };
+$VERSION = do { my @rev = ( q$Revision: 1.20 $ =~ /\d+/g ); sprintf "%d." . "%d" x $#rev, @rev };
 $REVISION =~ s/\$Date: //g;
 my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;
-$SIG{ INT } = $SIG{ TERM } = $SIG{ HUP } =
-  sub { killall_childs(); unlink $DAEMON_PID; };
+
+#$SIG{ INT } = $SIG{ TERM } = $SIG{ HUP } =
+#  sub { DESTROY; unlink $DAEMON_PID; };
 
 my %PID;
 my %NAME;
@@ -69,12 +70,12 @@ sub daemonize
     my $home     = $param{ home } if exists( $param{ home } );
     my $pid_file = $param{ pid_file } if exists( $param{ pid_file } );
     my $name     = $param{ name } if exists( $param{ name } );
-    if ( defined( $name  ) )
-            {
-                my $exp_name = $name ;
-                $exp_name =~ s/##/$$/g;
-                $0 = $exp_name;
-            }
+    if ( defined( $name ) )
+    {
+        my $exp_name = $name;
+        $exp_name =~ s/##/$$/g;
+        $0 = $exp_name;
+    }
     $DAEMON_PID = $pid_file;
 
     my $child = fork;
@@ -240,11 +241,7 @@ sub fork_child
             }
             else
             {
-                return (
-                    $CODE[10][0],
-                    $self->{ _pid },
-                    ( $self->{ _name } . $CODE[10][1] )
-                );
+                return ( $CODE[10][0], $self->{ _pid }, ( $self->{ _name } . $CODE[10][1] ) );
             }
             return ( $CODE[0][0], $self->{ _pid }, $CODE[0][1] );
         }
@@ -331,9 +328,9 @@ sub kill_child
             $pid_file =~ s/##/$pid/g;
             delete $self->{ _pids }{ $pid }{ pid_file };
             delete $self->{ _names }{ $name }{ pid_file };
-            if ( defined $self->{ _pid_file }{ _home } )
+            if ( defined $self->{ _pid_file } )
             {
-                $pid_file = $self->{ _pid_file }{ _home } . $pid_file;
+                $pid_file = $self->{ _pid_file } . $pid_file;
             }
             if ( -e $pid_file )
             {
@@ -352,7 +349,7 @@ sub kill_child
         delete $NAME{ $name }{ pid };
         delete $NAME{ $name };
     }
-##	$self->clean_childs();;
+    $self->clean_childs();
 }
 
 sub killall_childs
@@ -360,7 +357,12 @@ sub killall_childs
     my $self   = shift;
     my $signal = shift || 15;
     my $pids   = $self->{ _pids };
-    my %pids   = %{ $pids };
+    use Data::Dumper;
+    open LOG, ">> /tmp/log";
+    print LOG Dumper( $pids );
+    close LOG;
+    my %pids = %{ $pids };
+
     foreach ( keys %pids )
     {
         kill $signal => $_;
@@ -539,6 +541,13 @@ sub garbage_child
     $SIG{ CHLD } = \&garbage_child;
 }
 
+sub DESTROY
+{
+    my $self = shift;
+    $self->killall_childs();
+    unlink $DAEMON_PID;
+}
+
 1;
 
 =head1 ABSTRACT
@@ -566,7 +575,7 @@ The module fork a function code
 
           open( STDOUT, ">>/tmp/master.log" );
           my $nbr = 0;
-	  my tmout;
+	  my $timemout;
 
           while ( 1 )
           {
@@ -607,11 +616,11 @@ The module fork a function code
    {
        my $ref  = shift;
        my @args = @$ref;
-       my ( $data, $time_mout, $sockC ) = @args;
+       my ( $data, $time_out, $sockC ) = @args;
        $SIG{ USR1 } = sub { open my $log, ">>/tmp/log.s"; print $log "signal USR1 received\n"; close $log; };
-       if ( !$tmout )
+       if ( !$time_out )
        {
-           $tmout = 3;
+           $time_out = 3;
        }
 
        for ( 1 .. 4 )
@@ -619,10 +628,10 @@ The module fork a function code
            open my $fh, ">>/tmp/log";
            if ( defined $fh )
            {
-               print $fh "TMOUT = $time_mout  " . time . " PID=$$  cwd=" . Cwd::cwd() . " name =$0\n";
+               print $fh "TMOUT = $time_out  " . time . " PID=$$  cwd=" . Cwd::cwd() . " name =$0\n";
                $fh->close;
            }
-           sleep $time_outmout + rand( 5 );
+           sleep $time_out + rand( 5 );
        }
    }
 
@@ -686,7 +695,7 @@ I<function> is the reference to the function to use as code for the child. It is
 =over 3
 
 I<name> is the name for the newly created process (affect new_name  to $0 in the child).
-A ## (double sharp ) into the name is replaced with the PID of the process created.
+A ## (double sharp) into the name is replaced with the PID of the process created.
 
 =back 2
 
@@ -704,7 +713,7 @@ Be carefull for the files created into the process forked, authorizasions and pa
 =over 3
 
 the child get this new I<uid> (numerical value)
-Be carefull for the files created into the process forked, authorizasions and paths are relative to this chroot
+Be carefull for the files created into the process forked, authorizations and paths are relative to this chroot
 
 =back 2
 
@@ -713,7 +722,7 @@ Be carefull for the files created into the process forked, authorizasions and pa
 =over 3
 
 the child get this new I<gid> (numerical value)
-Be carefull for the files created into the process forked, authorizasions and paths are relative to this chroot
+Be carefull for the files created into the process forked, authorizations and paths are relative to this chroot
 
 =back 2
 
