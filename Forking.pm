@@ -4,8 +4,8 @@ package Proc::Forking;
 # Fork package
 # Gnu GPL2 license
 #
-# $Id: Forking.pm,v 1.31 2005/03/10 13:21:02 fabrice Exp $
-# $Revision: 1.31 $
+# $Id: Forking.pm,v 1.33 2005/03/10 16:11:46 fabrice Exp $
+# $Revision: 1.33 $
 #
 # Fabrice Dulaunoy <fabrice@dulaunoy.com>
 ###########################################################
@@ -20,14 +20,14 @@ use Cwd;
 use Sys::Load qw/getload/;
 use vars qw($VERSION );
 
-my $CVS_version = '$Revision: 1.31 $';
+my $CVS_version = '$Revision: 1.33 $';
 $CVS_version =~ s/\$//g;
-my $CVS_date = '$Date: 2005/03/10 13:21:02 $';
+my $CVS_date = '$Date: 2005/03/10 16:11:46 $';
 my $REVISION = "version $CVS_version created $CVS_date";
 $CVS_version =~ s/Revision: //g;
 my $VERSIONA = $';
 $VERSIONA =~ s/ //g;
-$VERSION = do { my @rev = ( q$Revision: 1.31 $ =~ /\d+/g ); sprintf "%d." . "%d" x $#rev, @rev };
+$VERSION = do { my @rev = ( q$Revision: 1.33 $ =~ /\d+/g ); sprintf "%d." . "%d" x $#rev, @rev };
 $REVISION =~ s/\$Date: //g;
 my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;
@@ -157,7 +157,7 @@ sub new
         _expiration      => $_[14],
         _expiration_auto => $_[15],
         _start_time      => $_[16],
-        _stict           => $_[17],
+#        _strict           => $_[17],
     }, $class;
 
 }
@@ -187,7 +187,7 @@ sub fork_child
 
     if ( exists( $param{ strict } ) )
     {
-        $self->{ _strict } = $param{ strict };
+#        $self->{ _strict } = $param{ strict };
          if ( exists( $self->{ _names }{ $param{ name } }{ pid } ) )
          {
              return ( $CODE[18][0], $self->{ _pid }, ( $param{ name } . $CODE[18][1] ) );
@@ -440,41 +440,6 @@ sub kill_child
     my $pid    = shift;
     my $signal = shift || 15;
     kill $signal => $pid;
-    my $state = kill 0 => $pid;
-    if ( !$state )
-    {
-        my $name = $self->{ $pid }{ name };
-        if ( defined $self->{ _pids }{ $pid }{ pid_file } )
-        {
-            my $pid_file = $self->{ _pids }{ $pid }{ pid_file };
-            $pid_file =~ s/##/$pid/g;
-            if ( defined $self->{ _pid_file } )
-            {
-                $pid_file = $self->{ _pid_file } . $pid_file;
-            }
-            if ( -e $pid_file )
-            {
-                delete_pid_file( $pid_file );
-            }
-            delete $self->{ _pids }{ $pid }{ pid_file };
-            delete $self->{ _names }{ $name }{ pid_file };
-        }
-        delete $self->{ _pids }{ $pid }{ expiration };
-        delete $self->{ _pids }{ $pid }{ start_time };
-        delete $self->{ _pids }{ $pid }{ name };
-        delete $self->{ _pids }{ $pid };
-
-        delete $self->{ _names }{ $name }{ expiration };
-        delete $self->{ _names }{ $name }{ start_time };
-        delete $self->{ _names }{ $name }{ pid };
-        delete $self->{ _names }{ $name };
-
-        delete $PID{ $pid }{ name };
-        delete $PID{ $pid };
-
-        delete $NAME{ $name }{ pid };
-        delete $NAME{ $name };
-    }
     $self->clean_childs();
 }
 
@@ -597,11 +562,17 @@ sub clean_childs
                 delete $self->{ _pids }{ $child }{ pid_file };
                 delete $self->{ _names }{ $name }{ pid_file };
             }
+	    delete $self->{ _pids }{ $child }{ start_time };
             delete $self->{ _pids }{ $child }{ name };
             delete $self->{ _pids }{ $child };
+	    delete $self->{ _names }{ $name }{ start_time };
             delete $self->{ _names }{ $name }{ pid };
             delete $self->{ _names }{ $name };
-            push @pid_remove_list,  $child;
+	    
+	    delete $NAME{ $name }{ pid };
+            delete $NAME{ $name };
+            
+	    push @pid_remove_list,  $child;
             push @name_remove_list, $name;
         }
     }
