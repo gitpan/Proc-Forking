@@ -4,8 +4,8 @@ package Proc::Forking;
 # Fork package
 # Gnu GPL2 license
 #
-# $Id: Forking.pm,v 1.33 2005/03/10 16:11:46 fabrice Exp $
-# $Revision: 1.33 $
+# $Id: Forking.pm,v 1.34 2005/03/16 13:38:28 fabrice Exp $
+# $Revision: 1.34 $
 #
 # Fabrice Dulaunoy <fabrice@dulaunoy.com>
 ###########################################################
@@ -20,14 +20,14 @@ use Cwd;
 use Sys::Load qw/getload/;
 use vars qw($VERSION );
 
-my $CVS_version = '$Revision: 1.33 $';
+my $CVS_version = '$Revision: 1.34 $';
 $CVS_version =~ s/\$//g;
-my $CVS_date = '$Date: 2005/03/10 16:11:46 $';
+my $CVS_date = '$Date: 2005/03/16 13:38:28 $';
 my $REVISION = "version $CVS_version created $CVS_date";
 $CVS_version =~ s/Revision: //g;
 my $VERSIONA = $';
 $VERSIONA =~ s/ //g;
-$VERSION = do { my @rev = ( q$Revision: 1.33 $ =~ /\d+/g ); sprintf "%d." . "%d" x $#rev, @rev };
+$VERSION = do { my @rev = ( q$Revision: 1.34 $ =~ /\d+/g ); sprintf "%d." . "%d" x $#rev, @rev };
 $REVISION =~ s/\$Date: //g;
 my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;
@@ -700,7 +700,7 @@ sub garbage_child
 sub DESTROY
 {
     my $self = shift;
-    $self->killall_childs();
+#    $self->killall_childs();
     unlink $DAEMON_PID;
 }
 
