@@ -4,8 +4,8 @@ package Proc::Forking;
 # Fork package
 # Gnu GPL2 license
 #
-# $Id: Forking.pm,v 1.4 2004/08/06 09:58:22 fabrice Exp $
-# $Revision: 1.4 $
+# $Id: Forking.pm,v 1.9 2004/09/30 07:19:03 fabrice Exp $
+# $Revision: 1.9 $
 #
 # Fabrice Dulaunoy <fabrice@dulaunoy.com>
 ###########################################################
@@ -20,19 +20,19 @@ use Cwd;
 use Sys::Load qw/getload/;
 use vars qw($VERSION );
 
-
-my $CVS_version = '$Revision: 1.4 $';
+my $CVS_version = '$Revision: 1.9 $';
 $CVS_version =~ s/\$//g;
-my $CVS_date = '$Date: 2004/08/06 09:58:22 $';
-my $REVISION     = "version $CVS_version created $CVS_date";
+my $CVS_date = '$Date: 2004/09/30 07:19:03 $';
+my $REVISION = "version $CVS_version created $CVS_date";
 $CVS_version =~ s/Revision: //g;
 my $VERSIONA = $';
 $VERSIONA =~ s/ //g;
-$VERSION = do { my @rev = (q$Revision: 1.4 $ =~ /\d+/g); sprintf "%d."."%d" x $#rev, @rev };
+$VERSION = do { my @rev = (q$Revision: 1.9 $ =~ /\d+/g); sprintf "%d."."%d" x $#rev, @rev };
 $REVISION =~ s/\$Date: //g;
-
+my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;
-$SIG{ INT } = $SIG{ TERM } = $SIG{ HUP } = sub {killall_childs(); }; 
+$SIG{ INT } =  $SIG{ TERM } =  $SIG{ HUP } =
+  sub { killall_childs(); unlink $DAEMON_PID;};
 
 my %PID;
 my %NAME;
@@ -48,7 +48,7 @@ $CODE[6]  = [ 6,  "error in parameters" ];
 $CODE[7]  = [ 7,  "No function provided" ];
 $CODE[8]  = [ 8,  "Can't fork" ];
 $CODE[9]  = [ 9,  "PID already present in list of PID processes" ];
-$CODE[10] = [ 10, "NAME already present in list of NAME processes" ];
+$CODE[10] = [ 10, " already present in list of NAME processes" ];
 $CODE[11] = [ 11, "Can't chdir" ];
 $CODE[12] = [ 12, "Can't chroot" ];
 $CODE[13] = [ 13, "Can't become DAEMON" ];
@@ -62,16 +62,33 @@ sub daemonize
     {
         return ( $CODE[6][0], 0, $CODE[6][1] );
     }
-    
+
     my %param    = @param;
     my $uid      = $param{ uid } if exists( $param{ uid } );
     my $gid      = $param{ gid } if exists( $param{ gid } );
     my $home     = $param{ home } if exists( $param{ home } );
     my $pid_file = $param{ pid_file } if exists( $param{ pid_file } );
-    return ( $CODE[13][0], 0, $CODE[13][1] ) unless defined( my $child = fork );
 
+    $DAEMON_PID = $pid_file;
+
+    my $child = fork;
+    if ( !defined $child )
+    {
+        return ( $CODE[13][0], 0, $CODE[13][1] );
+    }
     exit 0 if $child;    # parent dies;
-    my $ret = create_pid_file( $pid_file, $child );
+    my $ret = create_pid_file( $pid_file, $$ );
+    my $luid = -1;
+    my $lgid = -1;
+    if ( $uid ne '' )
+    {
+        $luid = $uid;
+    }
+    if ( $gid ne '' )
+    {
+        $lgid = $gid;
+    }
+    chown $luid, $lgid, $pid_file;
     if ( $home ne '' )
     {
         local ( $>, $< ) = ( $<, $> );
@@ -162,14 +179,13 @@ sub fork_child
     }
 
     {
-
         my $pid;
         my $ret;
-
+#    my $signals = POSIX::SigSet->new(SIGINT,SIGCHLD,SIGTERM,SIGHUP);
+#    sigprocmask(SIG_BLOCK,$signals);
         if ( $pid = fork() )
         {
 ## in  parent
-
             $self->{ _pid } = $pid;
             my $pid_file;
             my $exp_name;
@@ -201,9 +217,14 @@ sub fork_child
             {
                 return ( $CODE[9][0], $self->{ _pid }, $CODE[9][1] );
             }
-
+#use Data::Dumper;
+#open LOG, ">>/tmp/log";
+#print LOG "toto\n";
+#print LOG  Dumper(\%NAME);
+#close LOG;
             if ( !defined( $NAME{ $self->{ _name } } ) )
             {
+	   
 
                 if ( defined( $self->{ _pid_file } ) )
                 {
@@ -217,13 +238,14 @@ sub fork_child
             }
             else
             {
-                return ( $CODE[10][0], $self->{ _pid }, $CODE[10][1] );
+                return ( $CODE[10][0], $self->{ _pid }, ( $self->{ _name }.$CODE[10][1] ));
             }
             return ( $CODE[0][0], $self->{ _pid }, $CODE[0][1] );
         }
         elsif ( defined $pid )
         {
 ## in  child
+        $SIG{HUP} = $SIG{INT} = $SIG{CHLD} = $SIG{TERM} = 'DEFAULT';
             if ( defined( $self->{ _name } ) )
             {
                 my $exp_name = $self->{ _name };
@@ -283,8 +305,9 @@ sub fork_child
         {
             return ( $CODE[8][0], 0, $CODE[8][1] );
         }
+#	sigprocmask(SIG_UNBLOCK,$signals);
     }
-   
+
 }
 
 sub kill_child
@@ -323,7 +346,7 @@ sub killall_childs
     my $signal = shift || 15;
     foreach ( keys %PID )
     {
-        kill_child( $_);
+        kill_child( $_ );
     }
     $SIG{ INT } = $SIG{ TERM } = $SIG{ HUP } = 'DEFAULT';
 }
@@ -344,6 +367,68 @@ sub pid_nbr
 {
     my $self = shift;
     return ( scalar( keys %PID ) );
+}
+
+sub clean_childs
+{
+    my $self = shift;
+    my @pid_remove_list;
+    my @name_remove_list;
+    foreach my $child ( keys %PID )
+    {
+        my $state = kill 0 => $child;
+        if ( !$state )
+        {
+            my $name = $PID{ $child }{ name };
+            if ( defined $PID{ $child }{ pid_file } )
+            {
+                my $pid_file = $PID{ $child }{ pid_file };
+                $pid_file =~ s/##/$child/g;
+                delete $PID{ $child }{ pid_file };
+                delete $NAME{ $name }{ pid_file };
+                if ( defined $PID{ $child }{ home } )
+                {
+                    $pid_file = $PID{ $child }{ home } . $pid_file;
+                }
+
+                if ( -e $pid_file )
+                {
+                    delete_pid_file( $pid_file );
+                }
+            }
+            delete $PID{ $child }{ name };
+            delete $PID{ $child };
+            delete $NAME{ $name }{ pid };
+            delete $NAME{ $name };
+            push @pid_remove_list,  $child;
+            push @name_remove_list, $name;
+        }
+    }
+    return \@pid_remove_list, \@name_remove_list;
+}
+
+sub test_pid
+{
+    my $self  = shift;
+    my $child = shift;
+    my $state;
+    if ( defined $PID{ $child } )
+    {
+        $state = kill 0 => $child;
+    }
+    return ( $state, ( $PID{ $child }{ name } ) );
+}
+
+sub test_name
+{
+    my $self = shift;
+    my $name = shift;
+    my $state;
+    if ( defined( $NAME{ $name }{ pid } ) )
+    {
+        $state = kill 0 => ( $NAME{ $name }{ pid } );
+    }
+    return ( $state, ( $NAME{ $name }{ pid } ) );
 }
 
 sub version
@@ -375,13 +460,13 @@ sub create_pid_file
         my $fh      = IO::File->new( $file );
         my $pid_num = <$fh>;
 
-        if ( kill 0 => $1 )
+        if ( kill 0 => $pid_num )
         {
             return ( $CODE[3][0], $pid_num, $CODE[3][1] );
         }
         if ( !( -w $file && unlink $file ) )
         {
-           return ( $CODE[14][0], $pid_num, $CODE[14][1] );
+            return ( $CODE[14][0], $pid_num, $CODE[14][1] );
         }
     }
     my $fh = IO::File->new( $file, O_WRONLY | O_CREAT | O_EXCL, 0644 );
@@ -430,8 +515,8 @@ sub garbage_child
         delete $NAME{ $name }{ pid };
         delete $NAME{ $name };
     }
+    $SIG{ CHLD } = \&garbage_child;
 }
-
 
 1;
 
@@ -444,78 +529,80 @@ The module fork a function code
 
 =over 3
 
-#!/usr/bin/perl
+          use strict;
+          use Proc::Forking;
+          use Data::Dumper;
+          use Time::HiRes qw(usleep); # to allow micro sleep
+	  
+          my $f = Proc::Forking->new();
 
-use strict;
-use Proc::Forking;
-use Data::Dumper;
+          $f->daemonize(
+              uid      => 1000,
+              gid      => 1000,
+#              home     => "/tmp",
+              pid_file => "/tmp/master.pid"
+          );
 
-my $f = Proc::Forking->new();
-$f->daemonize(
-    uid      => 1000,
-    gid      => 1000,
-    home     => "/tmp",
-    pid_file => "/tmp/master.pid"
-);
-open( STDOUT, ">>/tmp/master.log" );
-my $nbr = 0;
-while ( 1 )
-{
+          open( STDOUT, ">>/tmp/master.log" );
+          my $nbr = 0;
 
-    if ( $nbr < 20 )
-    {
+          while ( 1 )
+          {
+              if ( $nbr < 20)
+              {
+                  my $extra = "other parameter";
+                  my ( $status, $pid, $error ) = $f->fork_child(
+                         function => \&func,
+                         name     => "new_name.##",
+                         args     => [ "hello SOMEONE", 3, $extra ],
+                         pid_file => "/tmp/fork.##.pid",
+                         uid      => 1000,
+                         gid      => 1000,
+                         home     => "/tmp",
+                         max_load => 1.5,
+                  );
+                  if ( $status == 4 ) # if the load become to high
+                  {
+                      print "Max load reached, do a little nap\n";
+		      usleep(100000);
+                      next;
+                  }
+		    elsif ( $status ) # if another kind of error
 
-        my $extra = "other parameter";
-        my ( $status, $pid, $error ) = $f->fork_child(
-            function => \&func,
-            name     => "new_name.##",
-            args     => [ "hello SOMEONE", 3, $extra ],
-            pid_file => "/tmp/fork.##.pid",
-            uid      => 1000,
-            gid      => 1000,
-            home     => "/tmp",
-            max_load => 1.5,
-        );
-        if ( $status == 4 )
-        {
-            print "Max load reached, do a little nap\n";
-            sleep 1;
-            next;
-        }
-        elsif ( $status )
-        {
-            print "PID=$pid\t error=$error\n";
-            print Dumper( $f->list_name() );
-            print Dumper( $f->list_pid() );
-            exit;
-        }
-    }
-    $nbr = $f->pid_nbr;
-    ;
-}
+                {
+                      print "PID=$pid\t error=$error\n";
+                      print Dumper( $f->list_names() );
+                      print Dumper( $f->list_pids() );
+                      exit;
+                  }
+              }
+              $nbr = $f->pid_nbr;
+              usleep(10); # always a good idea to put a small sleep to allow task swapper to gain some free resources
+          }
+	  
 
-sub func
-{
-    my $ref  = shift;
-    my @args = @$ref;
-    my ( $data, $time_mout, $sockC ) = @args;
-    $SIG{ USR1 } = sub { open my $log, ">>/tmp/log.s"; print $log "signal USR1 received\n"; close $log; };
-    if ( !$tmout )
-    {
-        $tmout = 3;
-    }
+   sub func
+   {
+       my $ref  = shift;
+       my @args = @$ref;
+       my ( $data, $time_mout, $sockC ) = @args;
+       $SIG{ USR1 } = sub { open my $log, ">>/tmp/log.s"; print $log "signal USR1 received\n"; close $log; };
+       if ( !$tmout )
+       {
+           $tmout = 3;
+       }
 
-    for ( 1 .. 4 )
-    {
-        open my $fh, ">>/tmp/log";
-        if ( defined $fh )
-        {
-            print $fh "TMOUT = $time_mout  " . time . " PID=$$  cwd=" . Cwd::cwd() . " name =$0\n";
-            $fh->close;
-        }
-        sleep $time_outmout + rand( 5 );
-    }
-}
+       for ( 1 .. 4 )
+       {
+           open my $fh, ">>/tmp/log";
+           if ( defined $fh )
+           {
+               print $fh "TMOUT = $time_mout  " . time . " PID=$$  cwd=" . Cwd::cwd() . " name =$0\n";
+               $fh->close;
+           }
+           sleep $time_outmout + rand( 5 );
+       }
+   }
 
 
 =head1 REQUIREMENT
@@ -535,11 +622,17 @@ The Fork module is object oriented and provide the following method
 
 =over 3
 
-=head2 To create of a new pool of child: new
+=head2 new
 
-	my $f = Proce::Forking->new();
+To create of a new pool of child: 
 
-=head2 To fork a process: fork_child
+	my $f = Proc::Forking->new();
+
+=back 3
+
+=head2 fork_child
+
+To fork a process
 
 	my ( $status, $pid, $error ) = $f->fork_child(
               function => \&func,
@@ -554,7 +647,7 @@ The Fork module is object oriented and provide the following method
               );
 	
 The only mandatory parameter is the reference to the function to fork (function => \&func)
-The normal return value is an array with: 3 elements (see B<RETRUN VALUE>)
+The normal return value is an array with: 3 elements (see B<RETURN VALUE>)
 
 =over 2
 
@@ -637,7 +730,8 @@ and the function return [ 5, 0,  "maximun number of processes reached" ]
  
  This function kill with a signal 15 (by default) the process with the provided PID
  An optional signal could be provided
- 
+
+
 =head2 killall_childs
 
 	$f->killall_childs([SIGNAL]);
@@ -707,7 +801,25 @@ Same for I<home> element
 
 This function return the number of process
 
-=head2 revision
+=head2 clean_childs
+
+	my (@pid_removed , @name_removed) =$f->clean_childs
+	
+This function return the list of pid(s) removed because no more responding and the corresponding list of name(s)
+
+=head2 test_pid
+
+	my $state = $f->test_pid(PID);
+	
+This function return 1 and the NAME of process if the process with the PID is present in pid list and running
+
+=head2 test_name
+
+	my $state = $f->test_pid(NAME);
+	
+This function 	eturn 1 and the PID of the process if the process with the NAME is present in name list and running
+	
+=head2 version
 
 	$f->version;
 
@@ -731,7 +843,9 @@ Return the CVS revision
 		
 This function put the main process in daemon mode and detaches it from console
 All parameter are optional
-The I<pid_file> is always created in absolute path, bafore any chroot either if I<home> is provided 
+The I<pid_file> is always created in absolute path, bafore any chroot either if I<home> is provided.
+After it's creation, the file is chmod according to the provided uid and gig
+When process is kill, the  pid_file is deleted
 
 =head3 uid
 
@@ -745,7 +859,7 @@ the process get this new uid  (numerical value)
 
 =over 3
 
-the gid get this new gid (numerical value)
+the process get this new gid (numerical value)
 
 =back 2
 
@@ -782,7 +896,7 @@ the different possible values are:
 	[ 7, 0, "No function provided" ];
 	[ 8, 0  "Can't fork" ];
 	[ 9, PID, "PID already present in list of PID processes" ];
-	[ 10, PID, "NAME already present in list of NAME processes" ];
+	[ 10, PID, " already present in list of NAME processes" ];
 	[ 11, 0, "Can't chdir" ];
 	[ 12, 0  "Can't chroot" ];
 	[ 13, 0, "Can't become DAEMON" ];
@@ -799,6 +913,9 @@ May be a kind of IPC
 
 A log, debug and/or syslog part 
 
+=item *
+
+A good test.pl for the install
 
 =head1 AUTHOR
 
