@@ -4,8 +4,8 @@ package Proc::Forking;
 # Fork package
 # Gnu GPL2 license
 #
-# $Id: Forking.pm,v 1.9 2004/09/30 07:19:03 fabrice Exp $
-# $Revision: 1.9 $
+# $Id: Forking.pm,v 1.10 2004/10/01 08:10:43 fabrice Exp $
+# $Revision: 1.10 $
 #
 # Fabrice Dulaunoy <fabrice@dulaunoy.com>
 ###########################################################
@@ -20,17 +20,18 @@ use Cwd;
 use Sys::Load qw/getload/;
 use vars qw($VERSION );
 
-my $CVS_version = '$Revision: 1.9 $';
+my $CVS_version = '$Revision: 1.10 $';
 $CVS_version =~ s/\$//g;
-my $CVS_date = '$Date: 2004/09/30 07:19:03 $';
+my $CVS_date = '$Date: 2004/10/01 08:10:43 $';
 my $REVISION = "version $CVS_version created $CVS_date";
 $CVS_version =~ s/Revision: //g;
 my $VERSIONA = $';
 $VERSIONA =~ s/ //g;
-$VERSION = do { my @rev = (q$Revision: 1.9 $ =~ /\d+/g); sprintf "%d."."%d" x $#rev, @rev };
+$VERSION = do { my @rev = (q$Revision: 1.10 $ =~ /\d+/g); sprintf "%d."."%d" x $#rev, @rev };
 $REVISION =~ s/\$Date: //g;
 my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;
+#$SIG{ CHLD } = 'IGNORE';
 $SIG{ INT } =  $SIG{ TERM } =  $SIG{ HUP } =
   sub { killall_childs(); unlink $DAEMON_PID;};
 
@@ -132,6 +133,8 @@ sub new
         _gid       => $_[8],
         _max_child => $_[9],
         _max_load  => $_[10],
+	_pids      => $_[11],
+	_names     => $_[12],
     }, $class;
 
 }
@@ -172,7 +175,7 @@ sub fork_child
     if ( exists( $param{ max_child } ) )
     {
         $self->{ _max_child } = $param{ max_child };
-        if ( $self->{ _max_child } <= ( keys %PID ) )
+        if ( $self->{ _max_child } <= ( keys  %{$self->{_pids} }) )
         {
             return ( $CODE[5][0], 0, $CODE[5][1] );
         }
@@ -198,43 +201,45 @@ sub fork_child
             {
                 $pid_file = $self->{ _pid_file };
                 $pid_file =~ s/##/$pid/g;
-            }
-
-            if ( !defined( $PID{ $pid } ) )
-            {
-                if ( defined( $self->{ _pid_file } ) )
+            }	
+		 if ( !defined( $self->{ _pids }{ $pid } ) )
+		{	
+		my %tmp;
+		if ( defined( $self->{ _pids })){
+                 %tmp = %{$self->{ _pids }};
+		}
+		$tmp{ $pid }{ pid } = $exp_name;
+		 if ( defined( $self->{ _pid_file } ) )
                 {
-                    $PID{ $pid }{ pid_file } = $pid_file;
+                    $tmp{ $pid }{ pid_file } = $pid_file;
                 }
-                if ( defined( $self->{ _home } ) )
+		 if ( defined( $self->{ _home } ) )
                 {
-                    $PID{ $pid }{ home } = $self->{ _home };
+                    $tmp{ $pid }{ home } = $self->{ _home };
                 }
-
-                $PID{ $pid }{ name } = $exp_name;
+		$self->{ _pids } = \%tmp;
+		%PID=%tmp;
             }
             else
             {
                 return ( $CODE[9][0], $self->{ _pid }, $CODE[9][1] );
-            }
-#use Data::Dumper;
-#open LOG, ">>/tmp/log";
-#print LOG "toto\n";
-#print LOG  Dumper(\%NAME);
-#close LOG;
-            if ( !defined( $NAME{ $self->{ _name } } ) )
-            {
-	   
-
-                if ( defined( $self->{ _pid_file } ) )
+            }		
+            if ( !defined( $self->{ _names }{ _name }  ) ){		
+		my %tmp;
+		if ( defined( $self->{ _names })){
+                 %tmp = %{$self->{ _names }};
+		}
+		 if ( defined( $self->{ _pid_file } ) )
                 {
-                    $NAME{ $exp_name }{ pid_file } = $pid_file;
+                    $tmp{ $exp_name }{ pid_file } = $pid_file;
                 }
                 if ( defined( $self->{ _home } ) )
                 {
-                    $NAME{ $exp_name }{ home } = $self->{ _home };
+                    $tmp{ $exp_name }{ home } = $self->{ _home };
                 }
-                $NAME{ $exp_name }{ pid } = $pid;
+		$tmp{ $exp_name }{ pid } = $pid;
+		$self->{ _names } = \%tmp;
+		%NAME= %tmp;
             }
             else
             {
@@ -316,13 +321,14 @@ sub kill_child
     my $pid    = shift;
     my $signal = shift || 15;
     kill $signal => $pid;
-    my $name = $PID{ $pid }{ name };
-    if ( defined $PID{ $pid }{ pid_file } )
+   
+    my $name = $self->{ $pid }{ name };
+    if ( defined $self->{ _pids }{ $pid }{ pid_file } )
     {
-        my $pid_file = $PID{ $pid }{ pid_file };
+        my $pid_file = $self->{_pids}{ $pid }{ pid_file };
         $pid_file =~ s/##/$pid/g;
-        delete $PID{ $pid }{ pid_file };
-        delete $NAME{ $name }{ pid_file };
+        delete $self->{_pids}{ $pid }{ pid_file };
+        delete $self->{_names}{ $name }{ pid_file };
         if ( defined $self->{ _pid_file }{ _home } )
         {
             $pid_file = $self->{ _pid_file }{ _home } . $pid_file;
@@ -332,41 +338,52 @@ sub kill_child
             delete_pid_file( $pid_file );
         }
     }
+    delete $self->{_pids}{ $pid }{ name };
+    delete $self->{_pids}{ $pid };
+
+    delete $self->{_names}{ $name }{ pid };
+    delete $self->{_names}{ $name };
+    
     delete $PID{ $pid }{ name };
     delete $PID{ $pid };
 
     delete $NAME{ $name }{ pid };
     delete $NAME{ $name };
-
 }
 
 sub killall_childs
 {
     my $self = shift;
     my $signal = shift || 15;
-    foreach ( keys %PID )
+    my $pids = $self->{_pids};
+    my %pids = %{$pids};
+    foreach (  keys  %pids)
     {
-        kill_child( $_ );
+	kill_child( $self ,$_);	
     }
-    $SIG{ INT } = $SIG{ TERM } = $SIG{ HUP } = 'DEFAULT';
+    $SIG{ INT } = $SIG{ TERM } = $SIG{ HUP } = 'DEFAULT';    
 }
+
+
 
 sub list_pids
 {
-    my $self = shift;
-    return \%PID;
+    my $self = shift; 
+    my $loc=  $self->{ _pids };
+    return $loc;
 }
 
 sub list_names
 {
     my $self = shift;
-    return \%NAME;
+    my $loc= $self->{ _names };
+    return $loc;
 }
 
 sub pid_nbr
 {
     my $self = shift;
-    return ( scalar( keys %PID ) );
+    return ( scalar( keys  %{$self->{_pids}} ) );
 }
 
 sub clean_childs
@@ -374,21 +391,21 @@ sub clean_childs
     my $self = shift;
     my @pid_remove_list;
     my @name_remove_list;
-    foreach my $child ( keys %PID )
+    foreach my $child ( keys %{ $self->{_pids}} )
     {
         my $state = kill 0 => $child;
         if ( !$state )
         {
-            my $name = $PID{ $child }{ name };
-            if ( defined $PID{ $child }{ pid_file } )
+            my $name =  $self->{_pids}{ $child }{ name };
+            if ( defined  $self->{_pids}{ $child }{ pid_file } )
             {
-                my $pid_file = $PID{ $child }{ pid_file };
+                my $pid_file =  $self->{_pids}{ $child }{ pid_file };
                 $pid_file =~ s/##/$child/g;
-                delete $PID{ $child }{ pid_file };
-                delete $NAME{ $name }{ pid_file };
-                if ( defined $PID{ $child }{ home } )
+                delete $self->{_pids}{ $child }{ pid_file };
+                delete  $self->{_names}{ $name }{ pid_file };
+                if ( defined  $self->{_pids}{ $child }{ home } )
                 {
-                    $pid_file = $PID{ $child }{ home } . $pid_file;
+                    $pid_file =  $self->{_pids}{ $child }{ home } . $pid_file;
                 }
 
                 if ( -e $pid_file )
@@ -396,10 +413,10 @@ sub clean_childs
                     delete_pid_file( $pid_file );
                 }
             }
-            delete $PID{ $child }{ name };
-            delete $PID{ $child };
-            delete $NAME{ $name }{ pid };
-            delete $NAME{ $name };
+            delete  $self->{_pids}{ $child }{ name };
+            delete  $self->{_pids}{ $child };
+            delete  $self->{_names}{ $name }{ pid };
+            delete $self->{_names}{ $name };
             push @pid_remove_list,  $child;
             push @name_remove_list, $name;
         }
@@ -412,11 +429,11 @@ sub test_pid
     my $self  = shift;
     my $child = shift;
     my $state;
-    if ( defined $PID{ $child } )
+    if ( defined  $self->{_pids}{ $child } )
     {
         $state = kill 0 => $child;
     }
-    return ( $state, ( $PID{ $child }{ name } ) );
+    return ( $state, (  $self->{_pids}{ $child }{ name } ) );
 }
 
 sub test_name
@@ -424,11 +441,11 @@ sub test_name
     my $self = shift;
     my $name = shift;
     my $state;
-    if ( defined( $NAME{ $name }{ pid } ) )
+    if ( defined(  $self->{_names}{ $name }{ pid } ) )
     {
-        $state = kill 0 => ( $NAME{ $name }{ pid } );
+        $state = kill 0 => ( $self->{_names}{ $name }{ pid } );
     }
-    return ( $state, ( $NAME{ $name }{ pid } ) );
+    return ( $state, ( $self->{_names}{ $name }{ pid } ) );
 }
 
 sub version
@@ -491,16 +508,16 @@ sub garbage_child
 {
     while ( ( my $child = waitpid( -1, WNOHANG ) ) > 0 )
     {
-        my $name = $PID{ $child }{ name };
-        if ( defined $PID{ $child }{ pid_file } )
+        my $name =  $PID{ $child }{ name };
+        if ( defined  $PID{ $child }{ pid_file } )
         {
-            my $pid_file = $PID{ $child }{ pid_file };
+            my $pid_file =  $PID{ $child }{ pid_file };
             $pid_file =~ s/##/$child/g;
-            delete $PID{ $child }{ pid_file };
-            delete $NAME{ $name }{ pid_file };
-            if ( defined $PID{ $child }{ home } )
+            delete  $PID{ $child }{ pid_file };
+            delete  $NAME{ $name }{ pid_file };
+            if ( defined  $PID{ $child }{ home } )
             {
-                $pid_file = $PID{ $child }{ home } . $pid_file;
+                $pid_file =  $PID{ $child }{ home } . $pid_file;
             }
 
             if ( -e $pid_file )
@@ -509,10 +526,10 @@ sub garbage_child
             }
         }
 
-        delete $PID{ $child }{ name };
-        delete $PID{ $child };
+        delete  $PID{ $child }{ name };
+        delete  $PID{ $child };
 
-        delete $NAME{ $name }{ pid };
+        delete  $NAME{ $name }{ pid };
         delete $NAME{ $name };
     }
     $SIG{ CHLD } = \&garbage_child;
