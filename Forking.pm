@@ -4,8 +4,8 @@ package Proc::Forking;
 # Fork package
 # Gnu GPL2 license
 #
-# $Id: Forking.pm,v 1.20 2004/12/18 20:21:19 fabrice Exp $
-# $Revision: 1.20 $
+# $Id: Forking.pm,v 1.22 2004/12/23 10:45:12 fabrice Exp $
+# $Revision: 1.22 $
 #
 # Fabrice Dulaunoy <fabrice@dulaunoy.com>
 ###########################################################
@@ -20,14 +20,14 @@ use Cwd;
 use Sys::Load qw/getload/;
 use vars qw($VERSION );
 
-my $CVS_version = '$Revision: 1.20 $';
+my $CVS_version = '$Revision: 1.22 $';
 $CVS_version =~ s/\$//g;
-my $CVS_date = '$Date: 2004/12/18 20:21:19 $';
+my $CVS_date = '$Date: 2004/12/23 10:45:12 $';
 my $REVISION = "version $CVS_version created $CVS_date";
 $CVS_version =~ s/Revision: //g;
 my $VERSIONA = $';
 $VERSIONA =~ s/ //g;
-$VERSION = do { my @rev = ( q$Revision: 1.20 $ =~ /\d+/g ); sprintf "%d." . "%d" x $#rev, @rev };
+$VERSION = do { my @rev = ( q$Revision: 1.22 $ =~ /\d+/g ); sprintf "%d." . "%d" x $#rev, @rev };
 $REVISION =~ s/\$Date: //g;
 my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;
@@ -76,7 +76,6 @@ sub daemonize
         $exp_name =~ s/##/$$/g;
         $0 = $exp_name;
     }
-    $DAEMON_PID = $pid_file;
 
     my $child = fork;
     if ( !defined $child )
@@ -84,7 +83,18 @@ sub daemonize
         return ( $CODE[13][0], 0, $CODE[13][1] );
     }
     exit 0 if $child;    # parent dies;
-    my $ret  = create_pid_file( $pid_file, $$ );
+
+    if ( exists( $param{ pid_file } ) )
+    {
+        $pid_file =~ s/##/$$/g;
+        $DAEMON_PID = $pid_file;
+        my @ret = create_pid_file( $pid_file, $$ );
+        if ( $ret[0] )
+        {
+            die "Another process is RUNNING\n";
+        }
+    }
+
     my $luid = -1;
     my $lgid = -1;
     if ( $uid ne '' )
@@ -375,18 +385,21 @@ sub killall_childs
 sub list_pids
 {
     my $self = shift;
+    $self->clean_childs();
     return $self->{ _pids };
 }
 
 sub list_names
 {
     my $self = shift;
+    $self->clean_childs();
     return $self->{ _names };
 }
 
 sub pid_nbr
 {
     my $self = shift;
+    $self->clean_childs();
     return ( scalar( keys %{ $self->{ _pids } } ) );
 }
 
@@ -398,7 +411,6 @@ sub clean_childs
 
     foreach my $child ( keys %{ $self->{ _pids } } )
     {
-
         my $state = kill 0 => $child;
         if ( !$state )
         {
@@ -432,6 +444,7 @@ sub clean_childs
 sub test_pid
 {
     my $self  = shift;
+    $self->clean_childs();
     my $child = shift;
     my $state;
     if ( defined $self->{ _pids }{ $child } )
@@ -444,6 +457,7 @@ sub test_pid
 sub test_name
 {
     my $self = shift;
+    $self->clean_childs();
     my $name = shift;
     my $state;
     if ( defined( $self->{ _names }{ $name }{ pid } ) )
