@@ -4,8 +4,8 @@ package Proc::Forking;
 # Fork package
 # Gnu GPL2 license
 #
-# $Id: Forking.pm,v 1.35 2005/03/31 07:41:37 fabrice Exp $
-# $Revision: 1.35 $
+# $Id: Forking.pm,v 1.37 2005/04/01 14:34:50 fabrice Exp $
+# $Revision: 1.37 $
 #
 # Fabrice Dulaunoy <fabrice@dulaunoy.com>
 ###########################################################
@@ -20,14 +20,14 @@ use Cwd;
 use Sys::Load qw/getload/;
 use vars qw($VERSION );
 
-my $CVS_version = '$Revision: 1.35 $';
+my $CVS_version = '$Revision: 1.37 $';
 $CVS_version =~ s/\$//g;
-my $CVS_date = '$Date: 2005/03/31 07:41:37 $';
+my $CVS_date = '$Date: 2005/04/01 14:34:50 $';
 my $REVISION = "version $CVS_version created $CVS_date";
 $CVS_version =~ s/Revision: //g;
 my $VERSIONA = $';
 $VERSIONA =~ s/ //g;
-$VERSION = do { my @rev = ( q$Revision: 1.35 $ =~ /\d+/g ); sprintf "%d." . "%d" x $#rev, @rev };
+$VERSION = do { my @rev = ( q$Revision: 1.37 $ =~ /\d+/g ); sprintf "%d." . "%d" x $#rev, @rev };
 $REVISION =~ s/\$Date: //g;
 my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;
@@ -67,9 +67,9 @@ sub daemonize
     }
 
     my %param    = @param;
-    my $uid      = $param{ uid } if exists( $param{ uid } );
-    my $gid      = $param{ gid } if exists( $param{ gid } );
-    my $home     = $param{ home } if exists( $param{ home } );
+    my $uid      = exists( $param{ uid } ) ? $param{ uid } : '';
+    my $gid      = exists( $param{ gid } ) ? $param{ gid } : '';
+    my $home     = exists( $param{ home } ) ? $param{ home } : '';
     my $pid_file = $param{ pid_file } if exists( $param{ pid_file } );
     my $name     = $param{ name } if exists( $param{ name } );
     if ( defined( $name ) )
@@ -187,7 +187,7 @@ sub fork_child
 
     if ( exists( $param{ strict } ) )
     {
-#        $self->{ _strict } = $param{ strict };
+        $self->{ _strict } = $param{ strict };
         if ( exists( $self->{ _names }{ $param{ name } }{ pid } ) )
         {
             return ( $CODE[18][0], $self->{ _pid }, ( $param{ name } . $CODE[18][1] ) );
@@ -695,9 +695,11 @@ sub garbage_child
 
         delete $PID{ $child }{ name };
         delete $PID{ $child };
-
-        delete $NAME{ $name }{ pid };
-        delete $NAME{ $name };
+        if ( exists $NAME{ $name } )
+        {
+            delete $NAME{ $name }{ pid };
+            delete $NAME{ $name };
+        }
     }
     $SIG{ CHLD } = \&garbage_child;
 }
