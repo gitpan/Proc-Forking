@@ -4,8 +4,8 @@ package Proc::Forking;
 # Fork package
 # Gnu GPL2 license
 #
-# $Id: Forking.pm,v 1.16 2004/11/29 19:39:30 fabrice Exp $
-# $Revision: 1.16 $
+# $Id: Forking.pm,v 1.17 2004/12/03 15:27:30 fabrice Exp $
+# $Revision: 1.17 $
 #
 # Fabrice Dulaunoy <fabrice@dulaunoy.com>
 ###########################################################
@@ -20,14 +20,14 @@ use Cwd;
 use Sys::Load qw/getload/;
 use vars qw($VERSION );
 
-my $CVS_version = '$Revision: 1.16 $';
+my $CVS_version = '$Revision: 1.17 $';
 $CVS_version =~ s/\$//g;
-my $CVS_date = '$Date: 2004/11/29 19:39:30 $';
+my $CVS_date = '$Date: 2004/12/03 15:27:30 $';
 my $REVISION = "version $CVS_version created $CVS_date";
 $CVS_version =~ s/Revision: //g;
 my $VERSIONA = $';
 $VERSIONA =~ s/ //g;
-$VERSION = do { my @rev = ( q$Revision: 1.16 $ =~ /\d+/g ); sprintf "%d." . "%d" x $#rev, @rev };
+$VERSION = do { my @rev = ( q$Revision: 1.17 $ =~ /\d+/g ); sprintf "%d." . "%d" x $#rev, @rev };
 $REVISION =~ s/\$Date: //g;
 my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;
@@ -68,7 +68,13 @@ sub daemonize
     my $gid      = $param{ gid } if exists( $param{ gid } );
     my $home     = $param{ home } if exists( $param{ home } );
     my $pid_file = $param{ pid_file } if exists( $param{ pid_file } );
-
+    my $name     = $param{ name } if exists( $param{ name } );
+    if ( defined( $name  ) )
+            {
+                my $exp_name = $name ;
+                $exp_name =~ s/##/$$/g;
+                $0 = $exp_name;
+            }
     $DAEMON_PID = $pid_file;
 
     my $child = fork;
@@ -859,6 +865,7 @@ Return the CVS revision
 		gid => 1000,
 		home => "/tmp",
 		pid_file => "/tmp/master.pid"
+		name => "DAEMON"
 		);
 		
 This function put the main process in daemon mode and detaches it from console
@@ -885,7 +892,7 @@ the process get this new gid (numerical value)
 
 =head3 home
 
-=back 2
+=over 3
 
 the path provided become the working directory of the child with a chroot
 
@@ -895,6 +902,13 @@ the path provided become the working directory of the child with a chroot
 
 I<pid_file> specified the path to the pid_file for the child
 Be carefull of uid, gid and chroot because the pid_file is created by the child)
+
+=head3 name
+
+=over 3
+
+I<name> is the name for the newly created process (affect new_name  to $0 in the child).
+A ## (double sharp ) into the name is replaced with the PID of the process created.
 
 =head1 RETURN VALUE
 
