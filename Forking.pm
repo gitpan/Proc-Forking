@@ -4,8 +4,8 @@ package Proc::Forking;
 # Fork package
 # Gnu GPL2 license
 #
-# $Id: Forking.pm,v 1.10 2004/10/01 08:10:43 fabrice Exp $
-# $Revision: 1.10 $
+# $Id: Forking.pm,v 1.12 2004/10/11 06:58:09 fabrice Exp $
+# $Revision: 1.12 $
 #
 # Fabrice Dulaunoy <fabrice@dulaunoy.com>
 ###########################################################
@@ -20,18 +20,17 @@ use Cwd;
 use Sys::Load qw/getload/;
 use vars qw($VERSION );
 
-my $CVS_version = '$Revision: 1.10 $';
+my $CVS_version = '$Revision: 1.12 $';
 $CVS_version =~ s/\$//g;
-my $CVS_date = '$Date: 2004/10/01 08:10:43 $';
+my $CVS_date = '$Date: 2004/10/11 06:58:09 $';
 my $REVISION = "version $CVS_version created $CVS_date";
 $CVS_version =~ s/Revision: //g;
 my $VERSIONA = $';
 $VERSIONA =~ s/ //g;
-$VERSION = do { my @rev = (q$Revision: 1.10 $ =~ /\d+/g); sprintf "%d."."%d" x $#rev, @rev };
+$VERSION = do { my @rev = (q$Revision: 1.12 $ =~ /\d+/g); sprintf "%d."."%d" x $#rev, @rev };
 $REVISION =~ s/\$Date: //g;
 my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;
-#$SIG{ CHLD } = 'IGNORE';
 $SIG{ INT } =  $SIG{ TERM } =  $SIG{ HUP } =
   sub { killall_childs(); unlink $DAEMON_PID;};
 
@@ -184,8 +183,6 @@ sub fork_child
     {
         my $pid;
         my $ret;
-#    my $signals = POSIX::SigSet->new(SIGINT,SIGCHLD,SIGTERM,SIGHUP);
-#    sigprocmask(SIG_BLOCK,$signals);
         if ( $pid = fork() )
         {
 ## in  parent
@@ -204,42 +201,35 @@ sub fork_child
             }	
 		 if ( !defined( $self->{ _pids }{ $pid } ) )
 		{	
-		my %tmp;
-		if ( defined( $self->{ _pids })){
-                 %tmp = %{$self->{ _pids }};
-		}
-		$tmp{ $pid }{ pid } = $exp_name;
+		$self->{ _pids }{ $pid } = $exp_name;
 		 if ( defined( $self->{ _pid_file } ) )
                 {
-                    $tmp{ $pid }{ pid_file } = $pid_file;
+		    $self->{ _pids }{ pid_file } = $pid_file;
+		    $PID{ pid_file } = $pid_file;
                 }
 		 if ( defined( $self->{ _home } ) )
                 {
-                    $tmp{ $pid }{ home } = $self->{ _home };
+		    $self->{ _pids }{ home } = $self->{ _home };
+		    $PID{ home } = $self->{ _home };
                 }
-		$self->{ _pids } = \%tmp;
-		%PID=%tmp;
             }
             else
             {
                 return ( $CODE[9][0], $self->{ _pid }, $CODE[9][1] );
             }		
-            if ( !defined( $self->{ _names }{ _name }  ) ){		
-		my %tmp;
-		if ( defined( $self->{ _names })){
-                 %tmp = %{$self->{ _names }};
-		}
+            if ( !defined( $self->{ _names }{$exp_name} ) ){		
+               $self->{ _names }{ $exp_name }{ pid } = $pid;
+		    $NAME{ $exp_name }{ pid } = $pid;
 		 if ( defined( $self->{ _pid_file } ) )
                 {
-                    $tmp{ $exp_name }{ pid_file } = $pid_file;
+		    $self->{ _names }{ $exp_name }{ pid_file } = $pid_file;
+		    $NAME{ $exp_name }{ pid_file } = $pid_file;
                 }
                 if ( defined( $self->{ _home } ) )
                 {
-                    $tmp{ $exp_name }{ home } = $self->{ _home };
-                }
-		$tmp{ $exp_name }{ pid } = $pid;
-		$self->{ _names } = \%tmp;
-		%NAME= %tmp;
+		    $self->{ _names }{ $exp_name }{ home } = $self->{ _home }; 
+		    $NAME{ $exp_name }{ home } =  $self->{ _home };
+                };
             }
             else
             {
@@ -310,7 +300,6 @@ sub fork_child
         {
             return ( $CODE[8][0], 0, $CODE[8][1] );
         }
-#	sigprocmask(SIG_UNBLOCK,$signals);
     }
 
 }
@@ -365,19 +354,16 @@ sub killall_childs
 }
 
 
-
 sub list_pids
 {
     my $self = shift; 
-    my $loc=  $self->{ _pids };
-    return $loc;
+    return $self->{ _pids };;
 }
 
 sub list_names
 {
     my $self = shift;
-    my $loc= $self->{ _names };
-    return $loc;
+    return $self->{ _names };
 }
 
 sub pid_nbr
