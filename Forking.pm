@@ -4,8 +4,8 @@ package Proc::Forking;
 # Fork package
 # Gnu GPL2 license
 #
-# $Id: Forking.pm,v 1.28 2005/01/14 12:02:09 fabrice Exp $
-# $Revision: 1.28 $
+# $Id: Forking.pm,v 1.31 2005/03/10 13:21:02 fabrice Exp $
+# $Revision: 1.31 $
 #
 # Fabrice Dulaunoy <fabrice@dulaunoy.com>
 ###########################################################
@@ -20,14 +20,14 @@ use Cwd;
 use Sys::Load qw/getload/;
 use vars qw($VERSION );
 
-my $CVS_version = '$Revision: 1.28 $';
+my $CVS_version = '$Revision: 1.31 $';
 $CVS_version =~ s/\$//g;
-my $CVS_date = '$Date: 2005/01/14 12:02:09 $';
+my $CVS_date = '$Date: 2005/03/10 13:21:02 $';
 my $REVISION = "version $CVS_version created $CVS_date";
 $CVS_version =~ s/Revision: //g;
 my $VERSIONA = $';
 $VERSIONA =~ s/ //g;
-$VERSION = do { my @rev = ( q$Revision: 1.28 $ =~ /\d+/g ); sprintf "%d." . "%d" x $#rev, @rev };
+$VERSION = do { my @rev = ( q$Revision: 1.31 $ =~ /\d+/g ); sprintf "%d." . "%d" x $#rev, @rev };
 $REVISION =~ s/\$Date: //g;
 my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;
@@ -36,24 +36,26 @@ my %PID;
 my %NAME;
 
 my @CODE;
-$CODE[0]  = [ 0,  "success" ];
-$CODE[1]  = [ 1,  "Can't fork a new process" ];
-$CODE[2]  = [ 2,  "Can't open PID file" ];
-$CODE[3]  = [ 3,  "Process already running with same PID" ];
-$CODE[4]  = [ 4,  "maximun LOAD reached" ];
-$CODE[5]  = [ 5,  "maximun number of processes reached" ];
-$CODE[6]  = [ 6,  "error in parameters" ];
-$CODE[7]  = [ 7,  "No function provided" ];
-$CODE[8]  = [ 8,  "Can't fork" ];
-$CODE[9]  = [ 9,  "PID already present in list of PID processes" ];
-$CODE[10] = [ 10, "NAME already present in list of NAME processes" ];
-$CODE[11] = [ 11, "Can't chdir" ];
-$CODE[12] = [ 12, "Can't chroot" ];
-$CODE[13] = [ 13, "Can't become DAEMON" ];
-$CODE[14] = [ 14, "Can't unlink PID file" ];
-$CODE[15] = [ 15, "maximun MEM used reached" ];
-$CODE[16] = [ 16, "Expiration TIMEOUT reached" ];
-$CODE[17] = [ 17, "NO expiration parameter" ];
+$CODE[0]  = [ 0,  " success" ];
+$CODE[1]  = [ 1,  " Can't fork a new process" ];
+$CODE[2]  = [ 2,  " Can't open PID file" ];
+$CODE[3]  = [ 3,  " Process already running with same PID" ];
+$CODE[4]  = [ 4,  " maximun LOAD reached" ];
+$CODE[5]  = [ 5,  " maximun number of processes reached" ];
+$CODE[6]  = [ 6,  " error in parameters" ];
+$CODE[7]  = [ 7,  " No function provided" ];
+$CODE[8]  = [ 8,  " Can't fork" ];
+$CODE[9]  = [ 9,  " PID already present in list of PID processes" ];
+$CODE[10] = [ 10, " NAME already present in list of NAME processes" ];
+$CODE[11] = [ 11, " Can't chdir" ];
+$CODE[12] = [ 12, " Can't chroot" ];
+$CODE[13] = [ 13, " Can't become DAEMON" ];
+$CODE[14] = [ 14, " Can't unlink PID file" ];
+$CODE[15] = [ 15, " maximun MEM used reached" ];
+$CODE[16] = [ 16, " Expiration TIMEOUT reached" ];
+$CODE[17] = [ 17, " NO expiration parameter" ];
+$CODE[18] = [ 18, " Don't fork, NAME already present (STRICT mode enbled)" ];
+$CODE[19] = [ 19, " Don't fork, PID_FILE already present (STRICT mode enbled)" ];
 
 sub daemonize
 {
@@ -155,6 +157,7 @@ sub new
         _expiration      => $_[14],
         _expiration_auto => $_[15],
         _start_time      => $_[16],
+        _stict           => $_[17],
     }, $class;
 
 }
@@ -179,6 +182,31 @@ sub fork_child
     $self->{ _home }     = $param{ home } if exists( $param{ home } );
     $self->{ _uid }      = $param{ uid } if exists( $param{ uid } );
     $self->{ _gid }      = $param{ gid } if exists( $param{ gid } );
+
+    $self->{ _strict } = 0;
+
+    if ( exists( $param{ strict } ) )
+    {
+        $self->{ _strict } = $param{ strict };
+         if ( exists( $self->{ _names }{ $param{ name } }{ pid } ) )
+         {
+             return ( $CODE[18][0], $self->{ _pid }, ( $param{ name } . $CODE[18][1] ) );
+         }
+        if ( exists( $param{ pid_file } ) )
+        {
+            if ( -e $param{ pid_file } )
+            {
+# pid file already exists
+                my $fh      = IO::File->new( $param{ pid_file } );
+                my $pid_num = <$fh>;
+                close $fh;
+                if ( kill 0 => $pid_num )
+                {
+                    return ( $CODE[19][0], $pid_num, $CODE[19][1] );
+                }
+            }
+        }
+    }
 
     if ( exists( $param{ pid_file } ) )
     {
@@ -274,7 +302,7 @@ sub fork_child
             {
                 return ( $CODE[9][0], $self->{ _pid }, $CODE[9][1] );
             }
-            if ( !defined( $self->{ _names }{ $exp_name } ) )
+            if ( !defined( $self->{ _names }{ $exp_name }{ pid } ) )
             {
                 $self->{ _names }{ $exp_name }{ pid }        = $pid;
                 $self->{ _names }{ $exp_name }{ start_time } = $start_time;
@@ -302,6 +330,7 @@ sub fork_child
             {
                 return ( $CODE[10][0], $self->{ _pid }, ( $self->{ _name } . $CODE[10][1] ) );
             }
+
             return ( $CODE[0][0], $self->{ _pid }, $CODE[0][1] );
         }
         elsif ( defined $pid )
@@ -343,7 +372,7 @@ sub fork_child
                 $pid_file = $self->{ _pid_folder } . $pid_file;
             }
             $ret = create_pid_file( $pid_file, $$ );
-            if ( ( exists( $self->{ _expiration } ) && (  exists($self->{ _expiration_auto } )) ) )
+            if ( ( exists( $self->{ _expiration } ) && ( exists( $self->{ _expiration_auto } ) ) ) )
             {
                 my $sta;
                 eval {
@@ -366,9 +395,11 @@ sub fork_child
                     return ( $CODE[16][0], 16, $CODE[16][1] );
                 };
                 alarm 0;
-#		if ($@ && $@ =~ /TIMEOUT/){
-#		return ( $CODE[16][0], 16, $CODE[16][1] ) ;
-#		}
+#		if ($@ && $@ =~ /TIMEOUT/)
+                if ( $! =~ /Interrupted system call/ )
+                {
+                    return ( $CODE[16][0], 16, $CODE[16][1] );
+                }
             }
             else
             {
@@ -487,8 +518,8 @@ sub expirate
 
 sub get_expiration
 {
-    my $self = shift; 
-    my $pid            = shift;
+    my $self = shift;
+    my $pid  = shift;
     if ( exists( $self->{ _pids }{ $pid }{ expiration } ) )
     {
         return ( $self->{ _pids }{ $pid }{ expiration } );
@@ -545,7 +576,6 @@ sub clean_childs
     my $self = shift;
     my @pid_remove_list;
     my @name_remove_list;
-
     foreach my $child ( keys %{ $self->{ _pids } } )
     {
         my $state = kill 0 => $child;
@@ -587,9 +617,9 @@ sub test_pid
     if ( exists $self->{ _pids }{ $child } )
     {
         $state = kill 0 => $child;
-	return wantarray ? ( $state,  ( $self->{ _pids }{ $child }{ name } ) ) : $state;
+        return wantarray ? ( $state, ( $self->{ _pids }{ $child }{ name } ) ) : $state;
     }
-    return wantarray ? ( 0,  ( $self->{ _pids }{ $child }{ name } ) ) : $state;
+    return wantarray ? ( 0, ( $self->{ _pids }{ $child }{ name } ) ) : $state;
 }
 
 sub test_name
@@ -598,10 +628,10 @@ sub test_name
     $self->clean_childs();
     my $name = shift;
     my $state;
-    if ( exists( $self->{ _names }{ $name } ) )
+    if ( defined( $self->{ _names }{ $name } ) )
     {
         $state = kill 0 => ( $self->{ _names }{ $name }{ pid } );
-	return wantarray ? ( $state, ( $self->{ _names }{ $name }{ pid } ) ) : $state;
+        return wantarray ? ( $state, ( $self->{ _names }{ $name }{ pid } ) ) : $state;
     }
     return wantarray ? ( 0, ( $self->{ _names }{ $name }{ pid } ) ) : $state;
 }
@@ -782,6 +812,7 @@ The module fork a function code
 	            max_load   => 5,
 	            max_mem    => 185000000,
 	            expiration => 10,
+	#	    expiration_auto => 1,
 	        );
 	        if ( $status == 4 )    # if the load become to high
 	        {
@@ -864,17 +895,19 @@ To create of a new pool of child:
 To fork a process
 
 	my ( $status, $pid, $error ) = $f->fork_child(
-              function   => \&func,
-              name       => "new_name.$_",
-              args       => [ "\thello SOMEONE",3, $other param],
-              pid_file   => "/tmp/fork.$_.pid",
-              uid        => 1000,
-              gid        => 1000,
-              home       => "/tmp",
-              max_load   => 5,
-              max_child  => 5,
-	      max_mem    => 1850000000,
-	      expiration => 20
+              function        => \&func,
+              name            => "new_name.$_",
+              args            => [ "\thello SOMEONE",3, $other param],
+              pid_file        => "/tmp/fork.$_.pid",
+              uid             => 1000,
+              gid             => 1000,
+              home            => "/tmp",
+              max_load        => 5,
+              max_child       => 5,
+	      max_mem         => 1850000000,
+	      expiration      => 20,
+	      expiration_auto => 1,
+	      strict          => 1
               );
 	
 The only mandatory parameter is the reference to the function to fork (function => \&func)
@@ -930,7 +963,7 @@ Be carefull for the files created into the process forked, authorizations and pa
 
 =over 3
 
-I<pid_file> givse the file containing the pid of the child (be care of uid, gid and chroot because the pid_file is created by the child)
+I<pid_file> give the file containing the pid of the child (be care of uid, gid and chroot because the pid_file is created by the child)
 A ## (double sharp ) into the name is expanded with the PID of the process created
 
 =back 2
@@ -979,6 +1012,17 @@ The expiration value write in list_pids and list_names are this value (in sec ) 
 =over 3
 
 if defined, the child kill themselve after the defined expiration time (!!! the set_expiration function is not able to modify this expiration time)
+
+=back 2
+
+
+=head3 strict
+
+=over 3
+
+if defined, the process is not forked if the NAME is already in process table, or if the PID_FILE id present and a corresponding process is still running
+
+BECARE, because the test is done before the fork, the NAME and the PID_FILE is not expanded with the child PID
 
 =back 2
 
@@ -1104,17 +1148,19 @@ This function return the list of pid(s) removed because no more responding and t
 
 	my @state = $f->test_pid(PID);
 	
-This function return a ARRAY with 
+In ARRAY context, this function return a ARRAY with 
 the first element is the status (1 = running and 0 = not running) 
 the second element is the NAME of process if the process with the PID is present in pid list and running
+In SCALAR contect, this function return the status (1 = running and 0 = not running)
 
 =head2 test_name
 
 	my @state = $f->test_pid(NAME);
 	
-This function return a ARRAY with
+In ARRAY context, this function return a ARRAY with
 the first element is the status (1 = running and 0 = not running)
-the second element is the PID of the process if the process with the NAME is present in name list and running
+the second element is the PID of the process if the process with the NAME is present in name list and running.
+In SCALAR contect, this function return the status (1 = running and 0 = not running)
 	
 =head2 version
 
@@ -1209,6 +1255,8 @@ the different possible values are:
 	[ 15, 0, "maximun MEM used reached" ];
 	[ 16, 16, "Expiration TIMEOUT reached" ];
         [ 17, 16, "NO expiration parameter" ];
+	[ 18, " Don't fork, NAME already present (STRICT mode enbled)" ];
+	[ 19, " Don't fork, PID_FILE already present (STRICT mode enbled)" ];
 
 =head1 EXAMPLES
 
