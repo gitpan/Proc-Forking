@@ -1,3 +1,15 @@
+Revision : 1.16 Date : 2004/11/29 19:39:30
+
+clean code
+
+----------------------------
+Revision : 1.15 Date : 2004/11/29 16:55:7
+
+in killall_childs don't remove the sighandler
+dan't call kill_child but do a kill and clan_childs (to keep list of pid if
+signal don't kill like HUP USR1 USR2
+
+----------------------------
 Revision : 1.14 Date : 2004/11/29 13:42:53
 
 in killall_childs send $signal to kill_child
