@@ -4,8 +4,8 @@ package Proc::Forking;
 # Fork package
 # Gnu GPL2 license
 #
-# $Id: Forking.pm,v 1.34 2005/03/16 13:38:28 fabrice Exp $
-# $Revision: 1.34 $
+# $Id: Forking.pm,v 1.35 2005/03/31 07:41:37 fabrice Exp $
+# $Revision: 1.35 $
 #
 # Fabrice Dulaunoy <fabrice@dulaunoy.com>
 ###########################################################
@@ -20,14 +20,14 @@ use Cwd;
 use Sys::Load qw/getload/;
 use vars qw($VERSION );
 
-my $CVS_version = '$Revision: 1.34 $';
+my $CVS_version = '$Revision: 1.35 $';
 $CVS_version =~ s/\$//g;
-my $CVS_date = '$Date: 2005/03/16 13:38:28 $';
+my $CVS_date = '$Date: 2005/03/31 07:41:37 $';
 my $REVISION = "version $CVS_version created $CVS_date";
 $CVS_version =~ s/Revision: //g;
 my $VERSIONA = $';
 $VERSIONA =~ s/ //g;
-$VERSION = do { my @rev = ( q$Revision: 1.34 $ =~ /\d+/g ); sprintf "%d." . "%d" x $#rev, @rev };
+$VERSION = do { my @rev = ( q$Revision: 1.35 $ =~ /\d+/g ); sprintf "%d." . "%d" x $#rev, @rev };
 $REVISION =~ s/\$Date: //g;
 my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;
@@ -179,19 +179,19 @@ sub fork_child
     $self->{ _function } = $param{ function };
     $self->{ _args }     = $param{ args } if exists( $param{ args } );
     $self->{ _name }     = $param{ name } if exists( $param{ name } );
-    $self->{ _home }     = $param{ home } if exists( $param{ home } );
-    $self->{ _uid }      = $param{ uid } if exists( $param{ uid } );
-    $self->{ _gid }      = $param{ gid } if exists( $param{ gid } );
+    $self->{ _home }     = exists( $param{ home } ) ? $param{ home } : '';
+    $self->{ _uid }      = exists( $param{ uid } ) ? $param{ uid } : '';
+    $self->{ _gid }      = exists( $param{ gid } ) ? $param{ gid } : '';
 
     $self->{ _strict } = 0;
 
     if ( exists( $param{ strict } ) )
     {
 #        $self->{ _strict } = $param{ strict };
-         if ( exists( $self->{ _names }{ $param{ name } }{ pid } ) )
-         {
-             return ( $CODE[18][0], $self->{ _pid }, ( $param{ name } . $CODE[18][1] ) );
-         }
+        if ( exists( $self->{ _names }{ $param{ name } }{ pid } ) )
+        {
+            return ( $CODE[18][0], $self->{ _pid }, ( $param{ name } . $CODE[18][1] ) );
+        }
         if ( exists( $param{ pid_file } ) )
         {
             if ( -e $param{ pid_file } )
@@ -208,10 +208,7 @@ sub fork_child
         }
     }
 
-    if ( exists( $param{ pid_file } ) )
-    {
-        $self->{ _pid_file } = $param{ pid_file };
-    }
+    $self->{ _pid_file } = exists( $param{ pid_file } ) ? $param{ pid_file } : '';
 
     if ( exists( $param{ max_load } ) )
     {
@@ -251,6 +248,10 @@ sub fork_child
 #	{
 #	 $self->{ _expiration_auto } = 0;
 #	}
+    }
+    else
+    {
+        $self->{ _expiration } = 0;
     }
 
     {
@@ -364,14 +365,18 @@ sub fork_child
             {
                 $> = $self->{ _uid };
             }
-            my $pid_file = $self->{ _pid_file };
-            $pid_file =~ s/##/$$/g;
-
-            if ( defined $self->{ _pid_folder } )
+            if ( $self->{ _pid_file } ne '' )
             {
-                $pid_file = $self->{ _pid_folder } . $pid_file;
+                my $pid_file = $self->{ _pid_file };
+
+                $pid_file =~ s/##/$$/g;
+
+                if ( defined $self->{ _pid_folder } )
+                {
+                    $pid_file = $self->{ _pid_folder } . $pid_file;
+                }
+                $ret = create_pid_file( $pid_file, $$ );
             }
-            $ret = create_pid_file( $pid_file, $$ );
             if ( ( exists( $self->{ _expiration } ) && ( exists( $self->{ _expiration_auto } ) ) ) )
             {
                 my $sta;
@@ -562,17 +567,17 @@ sub clean_childs
                 delete $self->{ _pids }{ $child }{ pid_file };
                 delete $self->{ _names }{ $name }{ pid_file };
             }
-	    delete $self->{ _pids }{ $child }{ start_time };
+            delete $self->{ _pids }{ $child }{ start_time };
             delete $self->{ _pids }{ $child }{ name };
             delete $self->{ _pids }{ $child };
-	    delete $self->{ _names }{ $name }{ start_time };
+            delete $self->{ _names }{ $name }{ start_time };
             delete $self->{ _names }{ $name }{ pid };
             delete $self->{ _names }{ $name };
-	    
-	    delete $NAME{ $name }{ pid };
+
+            delete $NAME{ $name }{ pid };
             delete $NAME{ $name };
-            
-	    push @pid_remove_list,  $child;
+
+            push @pid_remove_list,  $child;
             push @name_remove_list, $name;
         }
     }
@@ -701,7 +706,10 @@ sub DESTROY
 {
     my $self = shift;
 #    $self->killall_childs();
-    unlink $DAEMON_PID;
+    if ( defined $DAEMON_PID )
+    {
+        unlink $DAEMON_PID;
+    }
 }
 
 sub getmemfree
