@@ -4,8 +4,8 @@ package Proc::Forking;
 # Fork package
 # Gnu GPL2 license
 #
-# $Id: Forking.pm,v 1.37 2005/04/01 14:34:50 fabrice Exp $
-# $Revision: 1.37 $
+# $Id: Forking.pm,v 1.38 2005/08/16 09:36:47 fabrice Exp $
+# $Revision: 1.38 $
 #
 # Fabrice Dulaunoy <fabrice@dulaunoy.com>
 ###########################################################
@@ -20,14 +20,14 @@ use Cwd;
 use Sys::Load qw/getload/;
 use vars qw($VERSION );
 
-my $CVS_version = '$Revision: 1.37 $';
+my $CVS_version = '$Revision: 1.38 $';
 $CVS_version =~ s/\$//g;
-my $CVS_date = '$Date: 2005/04/01 14:34:50 $';
+my $CVS_date = '$Date: 2005/08/16 09:36:47 $';
 my $REVISION = "version $CVS_version created $CVS_date";
 $CVS_version =~ s/Revision: //g;
 my $VERSIONA = $';
 $VERSIONA =~ s/ //g;
-$VERSION = do { my @rev = ( q$Revision: 1.37 $ =~ /\d+/g ); sprintf "%d." . "%d" x $#rev, @rev };
+$VERSION = do { my @rev = ( q$Revision: 1.38 $ =~ /\d+/g ); sprintf "%d." . "%d" x $#rev, @rev };
 $REVISION =~ s/\$Date: //g;
 my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;
@@ -59,13 +59,20 @@ $CODE[19] = [ 19, " Don't fork, PID_FILE already present (STRICT mode enbled)" ]
 
 sub daemonize
 {
+
+
     my @param = @_;
     my $self  = shift @param;
+    
+    $SIG{ INT } = $SIG{ KILL } = $SIG{ TERM } = $SIG{ HUP } = sub { 
+  									unlink $DAEMON_PID;
+									exit 0 ;
+								};
+    
     if ( @param % 2 )
     {
         return ( $CODE[6][0], 0, $CODE[6][1] );
     }
-
     my %param    = @param;
     my $uid      = exists( $param{ uid } ) ? $param{ uid } : '';
     my $gid      = exists( $param{ gid } ) ? $param{ gid } : '';
@@ -707,11 +714,7 @@ sub garbage_child
 sub DESTROY
 {
     my $self = shift;
-#    $self->killall_childs();
-    if ( defined $DAEMON_PID )
-    {
-        unlink $DAEMON_PID;
-    }
+    unlink $self->{ _pid_file };
 }
 
 sub getmemfree
@@ -1168,7 +1171,7 @@ Return the CVS revision
 		
 This function put the main process in daemon mode and detaches it from console
 All parameter are optional
-The I<pid_file> is always created in absolute path, bafore any chroot either if I<home> is provided.
+The I<pid_file> is always created in absolute path, before any chroot either if I<home> is provided.
 After it's creation, the file is chmod according to the provided uid and gig
 When process is kill, the  pid_file is deleted
 
