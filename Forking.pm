@@ -4,8 +4,8 @@ package Proc::Forking;
 # Fork package
 # Gnu GPL2 license
 #
-# $Id: Forking.pm,v 1.38 2005/08/16 09:36:47 fabrice Exp $
-# $Revision: 1.38 $
+# Forking.pm 1.40 2009-07-15 15:10:12 $
+
 #
 # Fabrice Dulaunoy <fabrice@dulaunoy.com>
 ###########################################################
@@ -18,17 +18,11 @@ use POSIX qw(:signal_h setsid WNOHANG);
 use IO::File;
 use Cwd;
 use Sys::Load qw/getload/;
-use vars qw($VERSION );
 
-my $CVS_version = '$Revision: 1.38 $';
-$CVS_version =~ s/\$//g;
-my $CVS_date = '$Date: 2005/08/16 09:36:47 $';
-my $REVISION = "version $CVS_version created $CVS_date";
-$CVS_version =~ s/Revision: //g;
-my $VERSIONA = $';
-$VERSIONA =~ s/ //g;
-$VERSION = do { my @rev = ( q$Revision: 1.38 $ =~ /\d+/g ); sprintf "%d." . "%d" x $#rev, @rev };
-$REVISION =~ s/\$Date: //g;
+use vars qw( $VERSION);
+
+$VERSION = '1.40';
+
 my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;
 
@@ -64,7 +58,8 @@ sub daemonize
     my @param = @_;
     my $self  = shift @param;
     
-    $SIG{ INT } = $SIG{ KILL } = $SIG{ TERM } = $SIG{ HUP } = sub { 
+    $SIG{ INT } = $SIG{ KILL } = $SIG{ TERM } = $SIG{ HUP } = sub {    
+    									$self->killall_childs;
   									unlink $DAEMON_PID;
 									exit 0 ;
 								};
@@ -452,7 +447,8 @@ sub kill_child
     my $pid    = shift;
     my $signal = shift || 15;
     kill $signal => $pid;
-    $self->clean_childs();
+    my ($dp , $dn) = $self->clean_childs();
+    return wantarray ? ( scalar( @{$dp} ), $dp, $dn ) : scalar( @{$dp} );
 }
 
 sub killall_childs
@@ -466,7 +462,8 @@ sub killall_childs
     {
         kill $signal => $_;
     }
-    $self->clean_childs();
+    my ($dp , $dn) = $self->clean_childs();
+    return wantarray ? ( scalar( @{$dp} ), $dp, $dn ) : scalar( @{$dp} );
 }
 
 sub expirate
@@ -475,22 +472,17 @@ sub expirate
     my $signal = shift || 15;
     my $pids   = $self->{ _pids };
     my %pids   = %{ $pids };
-    my @deleted_pid;
-    my @deleted_name;
-
     my $now = time;
 
     foreach my $pid ( keys %pids )
     {
         if ( $self->{ _pids }{ $pid }{ expiration } < $now )
         {
-            $self->kill_child( $pid, $signal );
-            push @deleted_pid,  $pid;
-            push @deleted_name, $self->{ _pids }{ $pid }{ name };
+	    kill $signal => $pid;
         }
     }
-    $self->clean_childs();
-    return wantarray ? ( scalar( @deleted_pid ), \@deleted_pid, \@deleted_name ) : scalar( @deleted_pid );
+    my ($dp , $dn) = $self->clean_childs();
+    return wantarray ? ( scalar( @{$dp} ), $dp, $dn ) : scalar( @{$dp} );
 }
 
 sub get_expiration
@@ -530,21 +522,21 @@ sub set_expiration
 sub list_pids
 {
     my $self = shift;
-    $self->clean_childs();
+#     $self->clean_childs();
     return $self->{ _pids };
 }
 
 sub list_names
 {
     my $self = shift;
-    $self->clean_childs();
+#     $self->clean_childs();
     return $self->{ _names };
 }
 
 sub pid_nbr
 {
     my $self = shift;
-    $self->clean_childs();
+#     $self->clean_childs();
     return ( scalar( keys %{ $self->{ _pids } } ) );
 }
 
@@ -588,13 +580,14 @@ sub clean_childs
             push @name_remove_list, $name;
         }
     }
+
     return \@pid_remove_list, \@name_remove_list;
 }
 
 sub test_pid
 {
     my $self = shift;
-    $self->clean_childs();
+#     $self->clean_childs();
     my $child = shift;
     my $state;
     if ( exists $self->{ _pids }{ $child } )
@@ -608,7 +601,7 @@ sub test_pid
 sub test_name
 {
     my $self = shift;
-    $self->clean_childs();
+#     $self->clean_childs();
     my $name = shift;
     my $state;
     if ( defined( $self->{ _names }{ $name } ) )
@@ -623,12 +616,6 @@ sub version
 {
     my $self = shift;
     return $VERSION;
-}
-
-sub revision
-{
-    my $self = shift;
-    return $REVISION;
 }
 
 sub create_pid_file
@@ -849,6 +836,8 @@ The module fork a function code
 	}
 
 
+=back
+
 =head1 REQUIREMENT
 
 The B<Proc::Forking> module need the following modules
@@ -864,7 +853,8 @@ The B<Proc::Forking> module need the following modules
 
 The Fork module is object oriented and provide the following method
 
-=over 3
+
+=back
 
 =head2 new
 
@@ -872,7 +862,6 @@ To create of a new pool of child:
 
 	my $f = Proc::Forking->new();
 
-=back 3
 
 =head2 fork_child
 
@@ -885,7 +874,7 @@ To fork a process
               pid_file        => "/tmp/fork.$_.pid",
               uid             => 1000,
               gid             => 1000,
-              home            => "/tmp",
+              home            => "/tmp",q
               max_load        => 5,
               max_child       => 5,
 	      max_mem         => 1850000000,
@@ -899,13 +888,15 @@ The normal return value is an array with: 3 elements (see B<RETURN VALUE>)
 
 =over 2
 
+=back
+
 =head3 function
 
 =over 3
 
 I<function> is the reference to the function to use as code for the child. It is the only mandatory parameter.
 
-=back 2
+=back
 
 =head3 name
 
@@ -914,7 +905,7 @@ I<function> is the reference to the function to use as code for the child. It is
 I<name> is the name for the newly created process (affect new_name  to $0 in the child).
 A ## (double sharp) into the name is replaced with the PID of the process created.
 
-=back 2
+=back
 
 =head3 home
 
@@ -923,7 +914,7 @@ A ## (double sharp) into the name is replaced with the PID of the process create
 the I<path> provided will become the working directory of the child with a chroot.
 Be carefull for the files created into the process forked, authorizasions and paths are relative to this chroot
 
-=back 2
+=back
 
 =head3 uid
 
@@ -932,7 +923,7 @@ Be carefull for the files created into the process forked, authorizasions and pa
 the child get this new I<uid> (numerical value)
 Be carefull for the files created into the process forked, authorizations and paths are relative to this chroot
 
-=back 2
+=back
 
 =head3 gid
 
@@ -941,7 +932,7 @@ Be carefull for the files created into the process forked, authorizations and pa
 the child get this new I<gid> (numerical value)
 Be carefull for the files created into the process forked, authorizations and paths are relative to this chroot
 
-=back 2
+=back
 
 =head3 pid_file
 
@@ -950,7 +941,7 @@ Be carefull for the files created into the process forked, authorizations and pa
 I<pid_file> give the file containing the pid of the child (be care of uid, gid and chroot because the pid_file is created by the child)
 A ## (double sharp ) into the name is expanded with the PID of the process created
 
-=back 2
+=back
 
 =head3 max_load
 
@@ -959,7 +950,7 @@ A ## (double sharp ) into the name is expanded with the PID of the process creat
 if the "1 minute" load is greater than I<max_load>, the process is not forked
 and the function will return [ 4, 0, "maximun LOAD reached" ]
 
-=back 2
+=back
 
 =head3 max_child
 
@@ -968,7 +959,7 @@ and the function will return [ 4, 0, "maximun LOAD reached" ]
 if the number of running child is greater than max_child, the process is not forked
 and the function return [ 5, 0,  "maximun number of processes reached" ]
 
-=back 2
+=back
 
 =head3 max_mem
 
@@ -977,7 +968,7 @@ and the function return [ 5, 0,  "maximun number of processes reached" ]
 if the total free memory is lower than this value, the process is not forked
 and the function will return [ 15, 0, "maximun MEM used reached" ]
 
-=back 2
+=back
 
 =head3 expiration
 
@@ -988,7 +979,7 @@ to kill the process if it is still running after that expiration time
 The expiration value write in list_pids and list_names are this value (in sec ) + the start_time 
 (to allow set_expiration to modify the value)
 
-=back 2
+=back
 
 
 =head3 expiration_auto
@@ -997,7 +988,7 @@ The expiration value write in list_pids and list_names are this value (in sec ) 
 
 if defined, the child kill themselve after the defined expiration time (!!! the set_expiration function is not able to modify this expiration time)
 
-=back 2
+=back
 
 
 =head3 strict
@@ -1008,22 +999,24 @@ if defined, the process is not forked if the NAME is already in process table, o
 
 BECARE, because the test is done before the fork, the NAME and the PID_FILE is not expanded with the child PID
 
-=back 2
+=back
 
 =head2 kill_child
 
 	$f->kill_child(PID[,SIGNAL]);
  
- This function kill with a signal 15 (by default) the process with the provided PID
- An optional signal could be provided
+ This function kill with a signal 15 (by default) the process with the provided PID.
+ An optional signal could be provided.
+ This function return the number of childs killed, a ref to a list of PID killed, a ref to a list of names killed.
 
 
 =head2 killall_childs
 
 	$f->killall_childs([SIGNAL]);
 
-This function kills all processes with a signal 15 (by default)
-An optional signal could be provided
+This function kills all processes with a signal 15 (by default).
+An optional signal could be provided.
+This function return the number of childs killed, a ref to a list of PID killed, a ref to a list of names killed.
  
 =head2 list_pids
 
@@ -1086,11 +1079,11 @@ Same for I<home> element
 	
 =head2 expirate
 
-	$f->expirate([signal])
+	my ($n, $dp, n ) =$f->expirate([signal])
 
 This function test if child reach the expiration time and kill if necessary with the optional signal (default 15).
 In scalar context, this function return the number of childs killed.
-In array context, this function return (number of childs killed, list of PID killed, list of names killed).
+In array context, this function return the number of childs killed, a ref to a list of PID killed, a ref to a list of names killed.
 
 =head2 get_expirate
 
@@ -1126,7 +1119,7 @@ This function return the number of process
 
 	my (@pid_removed , @name_removed) =$f->clean_childs
 	
-This function return the list of pid(s) removed because no more responding and the corresponding list of name(s)
+This function return a ref to a list list of pid(s)  and a ref to a list of name(s) removed because no more responding
 
 =head2 test_pid
 
@@ -1152,13 +1145,6 @@ In SCALAR contect, this function return the status (1 = running and 0 = not runn
 
 Return the version number
 
-=head2 revision
-
-	$f->revision;
-
-Return the CVS revision
-
-
 =head2 daemonize
 
 	$f->daemonize(
@@ -1181,7 +1167,7 @@ When process is kill, the  pid_file is deleted
 
 the process get this new uid  (numerical value)
 
-=back 2
+=back
 
 =head3 gid
 
@@ -1189,7 +1175,7 @@ the process get this new uid  (numerical value)
 
 the process get this new gid (numerical value)
 
-=back 2
+=back
 
 =head3 home
 
@@ -1197,7 +1183,7 @@ the process get this new gid (numerical value)
 
 the path provided become the working directory of the child with a chroot
 
-=back 2
+=back
 
 =head3 pid_file
 
@@ -1210,6 +1196,8 @@ Be carefull of uid, gid and chroot because the pid_file is created by the child)
 
 I<name> is the name for the newly created process (affect new_name  to $0 in the child).
 A ## (double sharp ) into the name is replaced with the PID of the process created.
+
+=back
 
 =head1 RETURN VALUE
 
@@ -1343,9 +1331,10 @@ the different possible values are:
 	
 
 
-
     
 =head1 TODO
+
+=over
 
 =item *
 
@@ -1359,11 +1348,13 @@ A log, debug and/or syslog part
 
 A good test.pl for the install
 
+=back
+
 =head1 AUTHOR
 
 Fabrice Dulaunoy <fabrice@dulaunoy.com>
 
-4 Augustus 2004
+15 July 2009
 
 =head1 LICENSE
 
@@ -1381,7 +1372,7 @@ Under the GNU GPL2
     You should have received a copy of the GNU General Public License along with this program; 
     if not, write to the Free Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
-    Proc::Forking    Copyright (C) 2004 DULAUNOY Fabrice  Proc::Forking comes with ABSOLUTELY NO WARRANTY; 
+    Proc::Forking    Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009 DULAUNOY Fabrice  Proc::Forking comes with ABSOLUTELY NO WARRANTY; 
     for details See: L<http://www.gnu.org/licenses/gpl.html> 
     This is free software, and you are welcome to redistribute it under certain conditions;
    
