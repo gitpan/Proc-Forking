@@ -4,7 +4,7 @@ package Proc::Forking;
 # Fork package
 # Gnu GPL2 license
 #
-# Forking.pm 1.40 2009-07-15 15:10:12 $
+# Forking.pm 1.42 2009-10-15 12:54:18 $
 
 #
 # Fabrice Dulaunoy <fabrice@dulaunoy.com>
@@ -18,10 +18,11 @@ use POSIX qw(:signal_h setsid WNOHANG);
 use IO::File;
 use Cwd;
 use Sys::Load qw/getload/;
+use Carp;
 
 use vars qw( $VERSION);
 
-$VERSION = '1.40';
+$VERSION = '1.42';
 
 my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;
@@ -95,7 +96,9 @@ sub daemonize
         my @ret = create_pid_file( $pid_file, $$ );
         if ( $ret[0] )
         {
-            die "Another process is RUNNING\n";
+#             die "Another process is RUNNING\n";
+	    carp "Another process is RUNNING\n";
+	    return ( $CODE[3][0], 0, $CODE[3][1] ) ;
         }
     }
 
@@ -159,6 +162,7 @@ sub new
         _expiration      => $_[14],
         _expiration_auto => $_[15],
         _start_time      => $_[16],
+        _eagain_sleep    => $_[17],
 #        _strict           => $_[17],
     }, $class;
 
@@ -184,9 +188,10 @@ sub fork_child
     $self->{ _home }     = exists( $param{ home } ) ? $param{ home } : '';
     $self->{ _uid }      = exists( $param{ uid } ) ? $param{ uid } : '';
     $self->{ _gid }      = exists( $param{ gid } ) ? $param{ gid } : '';
-
+    $self->{ _eagain_sleep } =  exists( $param{ eagain_sleep } ) ?  $param{ eagain_sleep }: 5; ;
+    
+    
     $self->{ _strict } = 0;
-
     if ( exists( $param{ strict } ) )
     {
         $self->{ _strict } = $param{ strict };
@@ -429,7 +434,8 @@ sub fork_child
         {
             my $o0 = $0;
             $0 = "$o0: waiting to fork";
-            sleep 5;
+#             sleep 5;
+	    sleep $self->{ _eagain_sleep };
             $0 = $o0;
             redo;
         }
@@ -880,7 +886,8 @@ To fork a process
 	      max_mem         => 1850000000,
 	      expiration      => 20,
 	      expiration_auto => 1,
-	      strict          => 1
+	      strict          => 1,
+	      eagain_sleep    => 2,
               );
 	
 The only mandatory parameter is the reference to the function to fork (function => \&func)
@@ -998,6 +1005,17 @@ if defined, the child kill themselve after the defined expiration time (!!! the 
 if defined, the process is not forked if the NAME is already in process table, or if the PID_FILE id present and a corresponding process is still running
 
 BECARE, because the test is done before the fork, the NAME and the PID_FILE is not expanded with the child PID
+
+
+=back
+
+
+=head3 eagain_sleep
+
+=over 3
+
+timeout between a new try of forking if POSIX::EAGAIN error occor ( default 5 second);
+
 
 =back
 

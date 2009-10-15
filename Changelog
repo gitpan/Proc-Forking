@@ -1,4 +1,9 @@
 ----------------------------
+Revision : 1.42 Date : 2009/10/15 13:17:01
+
+replace die by carp
+ 
+----------------------------
 Revision : 1.40 Date : 2009/7/15 15:10:10
 
 correct the expirate return value 
