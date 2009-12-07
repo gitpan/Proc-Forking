@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Proc-Forking
-version:            1.42
+version:            1.43
 abstract:           Proc::Forking - fork a function and daemonize the parent
 author:  []
 license:            unknown

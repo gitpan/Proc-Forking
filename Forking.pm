@@ -4,7 +4,7 @@ package Proc::Forking;
 # Fork package
 # Gnu GPL2 license
 #
-# Forking.pm 1.42 2009-10-15 12:54:18 $
+# Forking.pm 1.43 2009-12-7 10:03:14 $
 
 #
 # Fabrice Dulaunoy <fabrice@dulaunoy.com>
@@ -22,7 +22,7 @@ use Carp;
 
 use vars qw( $VERSION);
 
-$VERSION = '1.42';
+$VERSION = '1.43';
 
 my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;
@@ -399,7 +399,7 @@ sub fork_child
                                 delete_pid_file( $pid_file );
                             }
                         }
-                        die "TIMEOUT";
+                      #  die "TIMEOUT";
                     };
                     alarm( $self->{ _expiration } - $self->{ _start_time } );
                     eval { $self->{ _function }( $self->{ _args } ); };

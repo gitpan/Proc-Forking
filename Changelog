@@ -1,4 +1,9 @@
 ----------------------------
+Revision : 1.43 Date: 2009-12-7 10:03:14
+
+remove die when timeout
+ 
+----------------------------
 Revision : 1.42 Date : 2009/10/15 13:17:01
 
 replace die by carp
