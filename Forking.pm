@@ -22,7 +22,7 @@ use Carp;
 
 use vars qw( $VERSION);
 
-$VERSION = '1.43';
+$VERSION = '1.44';
 
 my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;
@@ -399,6 +399,7 @@ sub fork_child
                                 delete_pid_file( $pid_file );
                             }
                         }
+			return ( $CODE[16][0], 16, $CODE[16][1] );
                       #  die "TIMEOUT";
                     };
                     alarm( $self->{ _expiration } - $self->{ _start_time } );

@@ -1,4 +1,9 @@
 ----------------------------
+Revision : 1.4 Date: 2009/12/9 08:50:40
+
+when child timeout, return the right code
+
+----------------------------
 Revision : 1.43 Date: 2009-12-7 10:03:14
 
 remove die when timeout
