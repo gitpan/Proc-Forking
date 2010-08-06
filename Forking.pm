@@ -23,7 +23,7 @@ use Carp;
 
 use vars qw( $VERSION);
 
-$VERSION = '1.45';
+$VERSION = '1.46';
 
 my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;
@@ -50,8 +50,8 @@ $CODE[14] = [ 14, " Can't unlink PID file" ];
 $CODE[15] = [ 15, " maximun MEM used reached" ];
 $CODE[16] = [ 16, " Expiration TIMEOUT reached" ];
 $CODE[17] = [ 17, " NO expiration parameter" ];
-$CODE[18] = [ 18, " Don't fork, NAME already present (STRICT mode enbled)" ];
-$CODE[19] = [ 19, " Don't fork, PID_FILE already present (STRICT mode enbled)" ];
+$CODE[18] = [ 18, " Don't fork, NAME already present (STRICT mode enabled)" ];
+$CODE[19] = [ 19, " Don't fork, PID_FILE already present (STRICT mode enabled)" ];
 
 sub daemonize
 {
@@ -353,6 +353,8 @@ sub fork_child
                 my $exp_name = $self->{ _name };
                 $exp_name =~ s/##/$$/g;
                 $0 = $exp_name;
+	        my $main_process = new Sys::Prctl();
+                $main_process->name( $0 );
             }
             $self->{ _start_time } = $start_time;
 

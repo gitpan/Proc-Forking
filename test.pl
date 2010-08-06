@@ -35,7 +35,7 @@ wait();
 
 wok($status,$error);
 
-($status,$pid,$error) =$new->fork_child(function => \&func1);
+($status,$pid,$error) =$new->fork_child(function => \&func1, name=>'test');
 
 wok($status,$error);
 
