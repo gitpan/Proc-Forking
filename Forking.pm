@@ -18,11 +18,12 @@ use POSIX qw(:signal_h setsid WNOHANG);
 use IO::File;
 use Cwd;
 use Sys::Load qw/getload/;
+use Sys::Prctl;
 use Carp;
 
 use vars qw( $VERSION);
 
-$VERSION = '1.44';
+$VERSION = '1.45';
 
 my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;
@@ -80,6 +81,8 @@ sub daemonize
         my $exp_name = $name;
         $exp_name =~ s/##/$$/g;
         $0 = $exp_name;
+	my $main_process = new Sys::Prctl();
+        $main_process->name( $0 );
     }
 
     my $child = fork;

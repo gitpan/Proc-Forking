@@ -1,5 +1,11 @@
+
 ----------------------------
-Revision : 1.4 Date: 2009/12/9 08:50:40
+Revision : 1.45 Date: 2009/12/15 16:16:46
+
+use Sys::Prctl to allow real change of exposed name
+
+----------------------------
+Revision : 1.44 Date: 2009/12/9 08:50:40
 
 when child timeout, return the right code
 
