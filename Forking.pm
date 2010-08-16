@@ -23,7 +23,7 @@ use Carp;
 
 use vars qw( $VERSION);
 
-$VERSION = '1.46';
+$VERSION = '1.47';
 
 my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;
