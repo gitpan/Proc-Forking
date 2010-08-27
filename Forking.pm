@@ -23,7 +23,7 @@ use Carp;
 
 use vars qw( $VERSION);
 
-$VERSION = '1.47';
+$VERSION = '1.48';
 
 my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;
@@ -659,7 +659,7 @@ sub create_pid_file
     }
     my $fh = IO::File->new( $file, O_WRONLY | O_CREAT | O_EXCL, 0644 );
     if ( !$fh ) { return ( $CODE[2][0], $pid_num, $CODE[2][1] ); }
-    print $fh $pid_num;
+    print $fh $pid_num."\n";
     close $fh;
     return ( $CODE[0][0], $pid_num, $CODE[0][1] );
 }

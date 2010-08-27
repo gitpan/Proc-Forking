@@ -1,3 +1,17 @@
+----------------------------
+Revision : 1.48 Date: 2010/08/27 13:48:32
+
+add a \n after the PID in the pid file
+
+----------------------------
+Revision : 1.47 Date: 2010/08/18 16:57:07.
+
+use Sys::Prctl in daemonize
+
+----------------------------
+Revision : 1.46 Date: 2010/08/06 12:18:19
+
+typo in error code/string
 
 ----------------------------
 Revision : 1.45 Date: 2009/12/15 16:16:46
