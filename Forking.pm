@@ -4,7 +4,7 @@ package Proc::Forking;
 # Fork package
 # Gnu GPL2 license
 #
-# Forking.pm 1.43 2009-12-7 10:03:14 $
+# Forking.pm 1.49 2010 09 02 14:52
 
 #
 # Fabrice Dulaunoy <fabrice@dulaunoy.com>
@@ -23,7 +23,7 @@ use Carp;
 
 use vars qw( $VERSION);
 
-$VERSION = '1.48';
+$VERSION = '1.49';
 
 my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;

@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Proc-Forking
-version:            1.48
+version:            1.49
 abstract:           Proc::Forking - fork a function and daemonize the parent
 author:  []
 license:            unknown
@@ -10,10 +10,11 @@ configure_requires:
 build_requires:
     ExtUtils::MakeMaker:  0
 requires:
-    Cwd:        0
-    IO::File:   0
-    POSIX:      0
-    Sys::Load:  0
+    Cwd:         0
+    IO::File:    0
+    POSIX:       0
+    Sys::Load:   0
+    Sys::Prctl:  0
 no_index:
     directory:
         - t
