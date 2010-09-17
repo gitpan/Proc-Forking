@@ -1,10 +1,15 @@
 ----------------------------
+Revision : 1.49 Date: 2010/09/02 14:53:43
+
+add dependency for Sys::Prctl
+
+----------------------------
 Revision : 1.48 Date: 2010/08/27 13:48:32
 
 add a \n after the PID in the pid file
 
 ----------------------------
-Revision : 1.47 Date: 2010/08/18 16:57:07.
+Revision : 1.47 Date: 2010/08/18 16:57:07
 
 use Sys::Prctl in daemonize
 

@@ -23,7 +23,7 @@ use Carp;
 
 use vars qw( $VERSION);
 
-$VERSION = '1.49';
+$VERSION = '1.50';
 
 my $DAEMON_PID;
 $SIG{ CHLD } = \&garbage_child;
@@ -60,7 +60,7 @@ sub daemonize
     my @param = @_;
     my $self  = shift @param;
     
-    $SIG{ INT } = $SIG{ KILL } = $SIG{ TERM } = $SIG{ HUP } = sub {    
+    $SIG{ INT } = $SIG{ KILL } = $SIG{ TERM } = sub {    
     									$self->killall_childs;
   									unlink $DAEMON_PID;
 									exit 0 ;
@@ -347,7 +347,7 @@ sub fork_child
         elsif ( defined $pid )
         {
 ## in  child
-            $SIG{ HUP } = $SIG{ INT } = $SIG{ CHLD } = $SIG{ TERM } = 'DEFAULT';
+            $SIG{ INT } = $SIG{ CHLD } = $SIG{ TERM } = 'DEFAULT';
             if ( defined( $self->{ _name } ) )
             {
                 my $exp_name = $self->{ _name };
